@@ -41,7 +41,7 @@ public:
             navigation_topic_,
             "/uav1/navigation_command");
         pnh_.param<std::string>("world_frame", world_frame_, "map");
-
+            //aaaa
         // 默认绝不写入真实控制话题。
         pnh_.param("enable_control", enable_control_, false);
         pnh_.param("odom_timeout", odom_timeout_, 0.30);
