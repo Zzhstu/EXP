@@ -22,7 +22,7 @@
 class FastLIOCloudBridge
 {
 public:
-
+    //hello:test for function1
     using Cloud = sensor_msgs::PointCloud2;
     using LioOdom = nav_msgs::Odometry;
     using Px4Pose = geometry_msgs::PoseStamped;
