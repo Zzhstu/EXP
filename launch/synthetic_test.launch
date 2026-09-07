@@ -1,0 +1,38 @@
+<launch>
+  <node pkg="fastlio_bridge" type="synthetic_scene.py"
+        name="synthetic_dynamic_scene" output="screen"/>
+
+  <node pkg="fastlio_bridge" type="dynamic_detector_node"
+        name="dynamic_detector" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/dynamic_detector.yaml"/>
+    <param name="background_frames" value="20"/>
+  </node>
+  <node pkg="fastlio_bridge" type="dynamic_cluster_node"
+        name="dynamic_cluster" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/dynamic_cluster.yaml"/>
+    <param name="dynamic_confirm_frames" value="3"/>
+    <param name="near_dynamic_confirm_frames" value="3"/>
+  </node>
+  <node pkg="fastlio_bridge" type="semantic_fusion_node"
+        name="semantic_fusion" output="screen">
+    <param name="enabled" value="false"/>
+  </node>
+  <node pkg="fastlio_bridge" type="static_map_builder_node"
+        name="static_map_builder" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/static_map.yaml"/>
+  </node>
+  <node pkg="fastlio_bridge" type="collision_risk_node"
+        name="collision_risk" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/dynamic_risk.yaml"/>
+  </node>
+  <node pkg="fastlio_bridge" type="static_collision_risk_node"
+        name="static_collision_risk" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/static_risk.yaml"/>
+  </node>
+  <node pkg="fastlio_bridge" type="avoidance_fusion_node"
+        name="avoidance_fusion" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/avoidance.yaml"/>
+  </node>
+  <node pkg="fastlio_bridge" type="system_watchdog_node"
+        name="dynamic_system_watchdog" output="screen"/>
+</launch>

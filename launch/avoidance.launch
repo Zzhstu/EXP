@@ -1,0 +1,32 @@
+<launch>
+  <arg name="enable_control" default="false"/>
+  <arg name="enable_goal_navigation" default="true"/>
+
+  <node pkg="fastlio_bridge" type="collision_risk_node"
+        name="collision_risk" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/dynamic_risk.yaml"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="static_collision_risk_node"
+        name="static_collision_risk" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/static_risk.yaml"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="avoidance_fusion_node"
+        name="avoidance_fusion" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/avoidance.yaml"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="goal_navigation_node"
+        name="goal_navigation" output="screen" if="$(arg enable_goal_navigation)"/>
+
+  <node pkg="fastlio_bridge" type="avoidance_command_bridge_node"
+        name="avoidance_command_bridge" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/command_bridge.yaml"/>
+    <param name="enable_control" value="$(arg enable_control)"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="system_watchdog_node"
+        name="dynamic_system_watchdog" output="screen"/>
+</launch>
+

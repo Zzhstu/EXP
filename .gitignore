@@ -1,0 +1,33 @@
+# ROS / catkin 构建产物
+build/
+devel/
+install/
+log/
+.catkin_tools/
+
+# C++ 编译中间文件
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.o
+*.a
+*.so
+
+# 编辑器和Python缓存
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+
+# 大型数据与模型
+*.bag
+*.pcd
+*.ply
+*.bin
+*.npy
+*.pth
+*.pt
+*.onnx
+*.engine
+
