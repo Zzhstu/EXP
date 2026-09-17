@@ -147,6 +147,13 @@ target_link_libraries(autoarming_control
   ${catkin_LIBRARIES}
 )
 
+# Keyboard position control
+add_executable(keyboard_control src/keyboard_control.cpp)
+add_dependencies(keyboard_control ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(keyboard_control
+  ${catkin_LIBRARIES}
+)
+
 # for pub_origin.cpp build0 .exe
 add_executable(pub_origin src/pub_origin.cpp)
 target_link_libraries(pub_origin

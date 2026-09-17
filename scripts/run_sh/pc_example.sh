@@ -1,34 +1,43 @@
-#!/bin/bash 
-tmux kill-session -t pc_example
-tmux new-session -d -s pc_example
+#!/usr/bin/env bash
 
-# split
-tmux split-window -h
-tmux select-pane -t 0
-tmux split-window -v
-tmux select-pane -t 2
-tmux split-window -v
-tmux select-pane -t 0
-tmux split-window -v
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ASTRA_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# ROBOCUP_WORLD="$ASTRA_ROOT/simulation/astra_gazebo_worlds/RoboCup_sim/RoboCup_sim.world"
+ROBOCUP_WORLD="$ASTRA_ROOT/simulation/astra_gazebo_worlds/RoboCup_sim/RoboCup_sim_pedsim.world"
+# 防止重复启动：已有 ROS master 时直接退出。
+if rosnode list >/dev/null 2>&1; then
+    echo "检测到已有 ROS master 正在运行。"
+    echo "请先停止旧仿真，再重新启动。"
+    exit 1
+fi
 
-tmux select-pane -t 0
-tmux send-keys "roscore &" C-m 
+open_terminal() {
+    local title="$1"
+    local command="$2"
 
-tmux select-pane -t 1
-tmux send-keys "sleep 3s" C-m 
-tmux send-keys "roslaunch px4 astra_example.launch" C-m 
+    gnome-terminal --title="$title" -- bash -ic "$command; exec bash"
+}
 
-tmux select-pane -t 2
-tmux send-keys "sleep 6s" C-m 
-tmux send-keys "astra" C-m
-tmux send-keys "roslaunch fast_lio mapping_mid360.launch rviz:=false" C-m 
+# 1. ROS master：保持前台运行，Ctrl+C 可以正常停止。
+open_terminal "AstraDrone - ROS Core" \
+    "roscore"
 
-tmux select-pane -t 3
-tmux send-keys "sleep 10s" C-m 
-tmux send-keys "astra" C-m
-tmux send-keys "roslaunch offboard autoarming_control.launch" C-m 
+# 2. PX4 与 Gazebo。
+open_terminal "AstraDrone - PX4 and Gazebo" \
+    # "sleep 3; roslaunch px4 astra_example.launch world:=$ROBOCUP_WORLD"
+export GAZEBO_PLUGIN_PATH="/home/a/pedsim_ws/devel/lib:${GAZEBO_PLUGIN_PATH}";
+export LD_LIBRARY_PATH="/home/a/pedsim_ws/devel/lib:${LD_LIBRARY_PATH}";
+export GAZEBO_MODEL_PATH="/home/a/pedsim_ws/src/pedsim_ros_with_gazebo/pedsim_gazebo_plugin/models:${GAZEBO_MODEL_PATH}";
+sleep 3;
+roslaunch px4 astra_example.launch world:=$ROBOCUP_WORLD
+# 3. FAST-LIO。
+open_terminal "AstraDrone - FAST-LIO" \
+    "sleep 6; astra && roslaunch fast_lio mapping_mid360.launch rviz:=true"
 
-tmux select-pane -t 4
-tmux send-keys "qgc" C-m 
+# 4. 键盘 / Offboard 控制。
+open_terminal "AstraDrone - Offboard Control" \
+    "sleep 10; astra && roslaunch offboard keyboard_control.launch"
 
-tmux -2 attach-session -t pc_example
+# 5. QGroundControl。
+open_terminal "AstraDrone - QGroundControl" \
+    "qgc"
