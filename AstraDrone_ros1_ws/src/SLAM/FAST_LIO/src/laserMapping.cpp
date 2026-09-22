@@ -59,6 +59,7 @@
 #include <livox_ros_driver/CustomMsg.h>
 #include "preprocess.h"
 #include <ikd-Tree/ikd_Tree.h>
+#include "dynamic_point_filter.hpp"
 
 #define INIT_TIME           (0.1)
 #define LASER_POINT_COV     (0.001)
@@ -118,6 +119,14 @@ pcl::VoxelGrid<PointType> downSizeFilterSurf;
 pcl::VoxelGrid<PointType> downSizeFilterMap;
 
 KD_TREE<PointType> ikdtree;
+
+// LMNet-style temporal residual filter without a semantic/CNN backend.
+// It runs after pose optimization and gates only map insertion in this first
+// integration, so temporary classification errors cannot destabilize odometry.
+fast_lio_dynamic::GeometricDynamicFilter<PointType> dynamic_filter;
+PointCloudXYZI::Ptr cloud_static(new PointCloudXYZI());
+PointCloudXYZI::Ptr cloud_dynamic(new PointCloudXYZI());
+PointCloudXYZI::Ptr cloud_unknown(new PointCloudXYZI());
 
 V3F XAxisPoint_body(LIDAR_SP_LEN, 0.0, 0.0);
 V3F XAxisPoint_world(LIDAR_SP_LEN, 0.0, 0.0);
@@ -424,16 +433,93 @@ bool sync_packages(MeasureGroup &meas)
 }
 
 int process_increments = 0;
-void map_incremental()
+void publish_dynamic_segmentation(const ros::Publisher &pub_static,
+                                  const ros::Publisher &pub_dynamic,
+                                  const ros::Publisher &pub_unknown)
+{
+    sensor_msgs::PointCloud2 message;
+    const ros::Time stamp = ros::Time().fromSec(lidar_end_time);
+
+    pcl::toROSMsg(*cloud_static, message);
+    message.header.stamp = stamp;
+    message.header.frame_id = "camera_init";
+    pub_static.publish(message);
+
+    pcl::toROSMsg(*cloud_dynamic, message);
+    message.header.stamp = stamp;
+    message.header.frame_id = "camera_init";
+    pub_dynamic.publish(message);
+
+    pcl::toROSMsg(*cloud_unknown, message);
+    message.header.stamp = stamp;
+    message.header.frame_id = "camera_init";
+    pub_unknown.publish(message);
+}
+
+void map_incremental(const ros::Publisher &pub_static,
+                     const ros::Publisher &pub_dynamic,
+                     const ros::Publisher &pub_unknown)
 {
     PointVector PointToAdd;
     PointVector PointNoNeedDownsample;
     PointToAdd.reserve(feats_down_size);
     PointNoNeedDownsample.reserve(feats_down_size);
+
+    cloud_static->clear();
+    cloud_dynamic->clear();
+    cloud_unknown->clear();
+    cloud_static->reserve(feats_down_size);
+    cloud_dynamic->reserve(feats_down_size);
+    cloud_unknown->reserve(feats_down_size);
+
+    // Transform once with the final state estimate. Temporal residuals are only
+    // meaningful after deskewing and ego-motion compensation into camera_init.
+    std::vector<bool> map_supported(static_cast<std::size_t>(feats_down_size), false);
     for (int i = 0; i < feats_down_size; i++)
     {
-        /* transform to world frame */
         pointBodyToWorld(&(feats_down_body->points[i]), &(feats_down_world->points[i]));
+
+        if (!Nearest_Points[i].empty())
+        {
+            const PointType &near = Nearest_Points[i][0];
+            const PointType &point = feats_down_world->points[i];
+            const double dx = point.x - near.x;
+            const double dy = point.y - near.y;
+            const double dz = point.z - near.z;
+            // MID360 sampling and small EKF residuals make a fixed 0.25 m
+            // gate too strict while the vehicle is moving. Keep the gate
+            // bounded so this does not turn into an unlimited map match.
+            const Eigen::Vector3d sensor_position(pos_lid.x(), pos_lid.y(), pos_lid.z());
+            const Eigen::Vector3d point_position(point.x, point.y, point.z);
+            const double range = (point_position - sensor_position).norm();
+            const double max_distance = std::max(
+                dynamic_filter.mapStaticDistance(), std::min(0.60, 0.03 * range));
+            map_supported[static_cast<std::size_t>(i)] =
+                dx * dx + dy * dy + dz * dz <= max_distance * max_distance;
+        }
+    }
+
+    const bool history_ready_before_this_scan = dynamic_filter.ready();
+    const Eigen::Vector3d sensor_origin(pos_lid.x(), pos_lid.y(), pos_lid.z());
+    const std::vector<fast_lio_dynamic::PointLabel> labels =
+        dynamic_filter.classifyAndUpdate(*feats_down_world, map_supported, sensor_origin);
+
+    for (int i = 0; i < feats_down_size; i++)
+    {
+        const fast_lio_dynamic::PointLabel label = labels[static_cast<std::size_t>(i)];
+        if (label == fast_lio_dynamic::PointLabel::STATIC)
+            cloud_static->push_back(feats_down_world->points[i]);
+        else if (label == fast_lio_dynamic::PointLabel::DYNAMIC)
+            cloud_dynamic->push_back(feats_down_world->points[i]);
+        else
+            cloud_unknown->push_back(feats_down_world->points[i]);
+
+        // Freeze incremental insertion during temporal warm-up. FAST-LIO still
+        // uses its initial ikd-tree for state estimation in these few frames.
+        if (!history_ready_before_this_scan ||
+            label != fast_lio_dynamic::PointLabel::STATIC)
+            continue;
+
         /* decide if need add to map */
         if (!Nearest_Points[i].empty() && flg_EKF_inited)
         {
@@ -471,6 +557,13 @@ void map_incremental()
     ikdtree.Add_Points(PointNoNeedDownsample, false); 
     add_point_size = PointToAdd.size() + PointNoNeedDownsample.size();
     kdtree_incremental_time = omp_get_wtime() - st_time;
+
+    publish_dynamic_segmentation(pub_static, pub_dynamic, pub_unknown);
+    ROS_INFO_STREAM_THROTTLE(2.0,
+        "Dynamic filter: static=" << cloud_static->size()
+        << ", dynamic=" << cloud_dynamic->size()
+        << ", unknown=" << cloud_unknown->size()
+        << (history_ready_before_this_scan ? "" : " (warming up; map insertion frozen)"));
 }
 
 PointCloudXYZI::Ptr pcl_wait_pub(new PointCloudXYZI(500000, 1));
@@ -793,6 +886,25 @@ int main(int argc, char** argv)
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
 
+    fast_lio_dynamic::DynamicFilterParams dynamic_params;
+    nh.param<bool>("dynamic_filter/enable", dynamic_params.enabled, true);
+    nh.param<int>("dynamic_filter/history_frames", dynamic_params.history_frames, 5);
+    nh.param<int>("dynamic_filter/min_history_frames", dynamic_params.min_history_frames, 4);
+    nh.param<int>("dynamic_filter/min_static_observations", dynamic_params.min_static_observations, 3);
+    nh.param<int>("dynamic_filter/min_changed_observations", dynamic_params.min_changed_observations, 3);
+    nh.param<double>("dynamic_filter/voxel_size", dynamic_params.voxel_size, 0.20);
+    nh.param<double>("dynamic_filter/residual_min", dynamic_params.residual_min, 0.20);
+    nh.param<double>("dynamic_filter/residual_max", dynamic_params.residual_max, 0.60);
+    nh.param<double>("dynamic_filter/residual_range_ratio", dynamic_params.residual_range_ratio, 0.01);
+    nh.param<double>("dynamic_filter/motion_gate", dynamic_params.motion_gate, 0.90);
+    nh.param<double>("dynamic_filter/map_static_distance", dynamic_params.map_static_distance, 0.25);
+    nh.param<double>("dynamic_filter/cluster_tolerance", dynamic_params.cluster_tolerance, 0.60);
+    nh.param<int>("dynamic_filter/min_cluster_points", dynamic_params.min_cluster_points, 3);
+    dynamic_filter.configure(dynamic_params);
+    ROS_WARN_COND(dynamic_params.enabled,
+        "Geometric dynamic filter enabled: UNKNOWN/DYNAMIC points will not enter the map. "
+        "Keep the scene static during the first scan when possible.");
+
     p_pre->lidar_type = lidar_type;
     cout<<"p_pre->lidar_type "<<p_pre->lidar_type<<endl;
     
@@ -855,6 +967,13 @@ int main(int argc, char** argv)
             ("/cloud_effected", 100000);
     ros::Publisher pubLaserCloudMap = nh.advertise<sensor_msgs::PointCloud2>
             ("/Laser_map", 100000);
+    // All three diagnostic clouds use the fixed camera_init/world frame.
+    ros::Publisher pubCloudStatic = nh.advertise<sensor_msgs::PointCloud2>
+            ("/cloud_static", 20);
+    ros::Publisher pubCloudDynamic = nh.advertise<sensor_msgs::PointCloud2>
+            ("/cloud_dynamic", 20);
+    ros::Publisher pubCloudUnknown = nh.advertise<sensor_msgs::PointCloud2>
+            ("/cloud_unclassified", 20);
     ros::Publisher pubOdomAftMapped = nh.advertise<nav_msgs::Odometry> 
             ("/Odometry", 100000);
     ros::Publisher pubPath          = nh.advertise<nav_msgs::Path> 
@@ -918,6 +1037,9 @@ int main(int argc, char** argv)
                         pointBodyToWorld(&(feats_down_body->points[i]), &(feats_down_world->points[i]));
                     }
                     ikdtree.Build(feats_down_world->points);
+                    // The first scan is required by FAST-LIO as an odometry
+                    // reference. It also seeds temporal residual generation.
+                    dynamic_filter.seed(*feats_down_world);
                 }
                 continue;
             }
@@ -974,7 +1096,7 @@ int main(int argc, char** argv)
 
             /*** add the feature points to map kdtree ***/
             t3 = omp_get_wtime();
-            map_incremental();
+            map_incremental(pubCloudStatic, pubCloudDynamic, pubCloudUnknown);
             t5 = omp_get_wtime();
             
             /******* Publish points *******/

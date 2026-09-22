@@ -1,0 +1,57 @@
+<launch>
+  <arg name="use_px4_initial_alignment" default="false"/>
+  <arg name="publish_mavros_vision_pose" default="true"/>
+  <arg name="enable_semantic" default="false"/>
+  <arg name="registered_cloud_topic" default="/cloud_registered"/>
+
+  <node pkg="fastlio_bridge" type="fastlio_bridge_node"
+        name="fastlio_bridge" output="screen">
+    <param name="use_px4_initial_alignment" value="$(arg use_px4_initial_alignment)"/>
+    <param name="publish_mavros_vision_pose" value="$(arg publish_mavros_vision_pose)"/>
+    <!-- Map-aligned, bounded and latched path used by the demo RViz config. -->
+    <param name="path_topic" value="/uav1/fastlio/path"/>
+    <param name="path_decimation" value="5"/>
+    <param name="max_path_poses" value="12000"/>
+    <remap from="/uav1/mavros/local_position/pose" to="/mavros/local_position/pose"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="cloud_bridge_node"
+        name="fastlio_cloud_bridge" output="screen">
+    <param name="use_px4_initial_alignment" value="$(arg use_px4_initial_alignment)"/>
+    <!-- Current registered scan. static_map_builder integrates this into the
+         mutable global /uav1/fastlio/cloud_map. -->
+    <param name="output_topic" value="/uav1/fastlio/registered_scan"/>
+    <remap from="/cloud_registered" to="$(arg registered_cloud_topic)"/>
+    <remap from="/uav1/mavros/local_position/pose" to="/mavros/local_position/pose"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="dynamic_detector_node"
+        name="dynamic_detector" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/dynamic_detector.yaml"/>
+  </node>
+
+  <!-- dynamic_cluster already owns association, tracking and dynamic confirmation. -->
+  <node pkg="fastlio_bridge" type="dynamic_cluster_node"
+        name="dynamic_cluster" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/dynamic_cluster.yaml"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="dynamic_predictor_node"
+        name="dynamic_predictor" output="screen">
+    <param name="input_topic" value="/uav1/semantic_dynamic_objects"/>
+    <param name="prediction_time" value="0.5"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="semantic_fusion_node"
+        name="semantic_fusion" output="screen">
+    <param name="enabled" value="$(arg enable_semantic)"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="dynamic_marker_node"
+        name="dynamic_marker" output="screen"/>
+
+  <node pkg="fastlio_bridge" type="static_map_builder_node"
+        name="static_map_builder" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/static_map.yaml"/>
+  </node>
+</launch>

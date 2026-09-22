@@ -2,8 +2,19 @@
 <!-- Launch file for Livox MID360 LiDAR -->
 
 	<arg name="rviz" default="false" />
+	<!-- Set dynamic_filter:=false to recover the original FAST-LIO insertion behavior. -->
+	<arg name="dynamic_filter" default="true" />
+	<!-- The Gazebo plugin publishes PointCloud2; use FAST-LIO's simulator handler. -->
+	<arg name="sim_lidar" default="false" />
 
 	<rosparam command="load" file="$(find fast_lio)/config/mid360.yaml" />
+	<!--
+	  Real MID360/Livox driver: lidar_type=1 (livox_ros_driver/CustomMsg).
+	  Gazebo: lidar_type=4 (sensor_msgs/PointCloud2 / MARSIM handler).
+	  Do not enable sim_lidar for a real sensor.
+	-->
+	<param name="preprocess/lidar_type" type="int" value="4" if="$(arg sim_lidar)" />
+	<param name="preprocess/lidar_type" type="int" value="1" unless="$(arg sim_lidar)" />
 
 	<param name="feature_extract_enable" type="bool" value="0"/>
 	<param name="point_filter_num" type="int" value="3"/>
@@ -12,6 +23,34 @@
 	<param name="filter_size_map" type="double" value="0.5" />
 	<param name="cube_side_length" type="double" value="1000" />
 	<param name="runtime_pos_log_enable" type="bool" value="0" />
+
+	<!--
+	  Pure geometric dynamic-point filtering (no SalsaNext / no semantic model).
+	  IMPORTANT: UNKNOWN points are delayed instead of immediately entering the
+	  map. Keep the first scan as static as possible because FAST-LIO must use it
+	  to initialize the odometry reference map.
+	-->
+	<param name="dynamic_filter/enable" type="bool" value="$(arg dynamic_filter)" />
+	<!-- MID360 is non-repetitive: 5 frames gives temporal evidence without a long delay. -->
+	<param name="dynamic_filter/history_frames" type="int" value="5" />
+	<param name="dynamic_filter/min_history_frames" type="int" value="4" />
+	<param name="dynamic_filter/min_static_observations" type="int" value="3" />
+	<!-- Two changed frames are enough to flag a moving cluster at 10 Hz. -->
+	<param name="dynamic_filter/min_changed_observations" type="int" value="2" />
+	<!-- Detector voxel size is independent of FAST-LIO's 0.5 m map voxel. -->
+	<!-- MID360 is non-repetitive; use a coarser temporal grid. -->
+	<param name="dynamic_filter/voxel_size" type="double" value="0.40" />
+	<!-- Raise residual_min if walls flicker; lower it if slow pedestrians are missed. -->
+	<param name="dynamic_filter/residual_min" type="double" value="0.35" />
+	<!-- Caps long-range search cost and prevents very distant points matching too loosely. -->
+	<param name="dynamic_filter/residual_max" type="double" value="0.90" />
+	<param name="dynamic_filter/residual_range_ratio" type="double" value="0.01" />
+	<!-- Static map support has priority over temporal sampling differences. -->
+	<param name="dynamic_filter/map_static_distance" type="double" value="0.45" />
+	<param name="dynamic_filter/motion_gate" type="double" value="1.20" />
+	<param name="dynamic_filter/cluster_tolerance" type="double" value="0.60" />
+	<!-- With 0.5 m scan downsampling, keep this small enough for a pedestrian. -->
+	<param name="dynamic_filter/min_cluster_points" type="int" value="3" />
     <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" /> 
 
 	<group if="$(arg rviz)">

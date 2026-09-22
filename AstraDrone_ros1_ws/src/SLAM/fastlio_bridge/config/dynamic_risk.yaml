@@ -1,0 +1,22 @@
+objects_topic: /uav1/semantic_dynamic_objects
+odom_topic: /uav1/fastlio/odom
+prediction_horizon: 1.50
+# 动态目标水平距离：safe_radius 进入减速/让行，emergency_distance 紧急逃逸。
+# 想靠得更近时优先小幅降低 safe_radius，不要先降低 emergency_distance。
+safe_radius: 1.35
+vertical_safe_distance: 0.80
+emergency_distance: 0.75
+emergency_time_to_cpa: 0.80
+emergency_cpa_distance: 0.45
+emergency_hold_time: 0.25
+max_avoid_speed: 0.80
+min_relative_speed: 0.05
+objects_timeout: 0.30
+odom_timeout: 0.30
+velocity_alpha: 0.30
+risk_exit_radius: 1.60
+risk_release_time: 0.30
+target_hold_time: 0.30
+avoidance_alpha: 0.20
+direction_alpha: 0.15
+min_avoid_speed: 0.22

@@ -1,0 +1,36 @@
+# FAST-LIO stable map -> 2-D inflated occupancy grid -> A* -> local waypoint.
+map_topic: /uav1/stable_static_map
+local_map_topic: /uav1/local_static_map
+local_free_space_topic: /uav1/local_free_space
+odom_topic: /uav1/fastlio/odom
+goal_topic: /move_base_simple/goal
+waypoint_topic: /uav1/planner/waypoint
+path_topic: /uav1/planner/path
+local_path_topic: /uav1/planner/local_path
+world_frame: map
+
+resolution: 0.25
+# Global planned clearance. Lowering this allows a closer route but must remain
+# larger than the physical UAV radius plus localization/map error.
+inflation_radius: 0.95
+planning_margin: 4.0
+# Used only when local_replan_to_final_goal=false: repair this many metres of
+# the global route. Keep horizon < local_radius so local data covers it.
+local_planning_horizon: 4.0
+local_planning_margin: 2.5
+# true: recompute a complete corrected route to the final goal using
+# global occupied - local free + local occupied. This allows an immediate
+# shortcut when a stale person/ghost obstacle is observed to have disappeared.
+local_replan_to_final_goal: true
+local_free_clear_radius: 0.15
+# Only map points crossing the UAV body at flight altitude become 2-D obstacles;
+# this excludes the ground and high tree canopy from the navigation grid.
+obstacle_min_relative_z: -0.80
+obstacle_max_relative_z: 0.80
+lookahead_distance: 1.00
+goal_tolerance: 0.30
+start_clearance_radius: 0.35
+goal_search_radius: 1.50
+minimum_map_points: 30
+replan_rate: 2.0
+max_grid_cells: 250000

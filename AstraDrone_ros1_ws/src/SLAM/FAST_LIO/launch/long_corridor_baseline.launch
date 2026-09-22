@@ -1,0 +1,11 @@
+<launch>
+  <!-- Baseline is evaluated with the original FAST-LIO map insertion path. -->
+  <arg name="model_name" default="iris_mid360"/>
+  <arg name="tag" default="long_corridor_baseline"/>
+  <arg name="output_dir" default="$(env HOME)/.ros/fastlio_baselines"/>
+  <node pkg="fast_lio" type="fastlio_baseline_recorder.py" name="fastlio_baseline_recorder" output="screen">
+    <param name="model_name" value="$(arg model_name)"/>
+    <param name="tag" value="$(arg tag)"/>
+    <param name="output_dir" value="$(arg output_dir)"/>
+  </node>
+</launch>

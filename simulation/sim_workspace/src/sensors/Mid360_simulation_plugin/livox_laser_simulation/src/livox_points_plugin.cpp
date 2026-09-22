@@ -59,7 +59,7 @@ void LivoxPointsPlugin::Load(gazebo::sensors::SensorPtr _parent, sdf::ElementPtr
         ROS_INFO_STREAM("cannot get csv file!" << file_name << "will return !");
         return;
     }
-    
+
     sdfPtr = sdf;
     auto rayElem = sdfPtr->GetElement("ray");
     auto scanElem = rayElem->GetElement("scan");
@@ -81,6 +81,27 @@ void LivoxPointsPlugin::Load(gazebo::sensors::SensorPtr _parent, sdf::ElementPtr
     scanPub = node->Advertise<msgs::LaserScanStamped>(_parent->Topic(), 50);
     aviaInfos.clear();
     convertDataToRotateInfo(datas, aviaInfos);
+
+    // The recorded Mid-360 pattern covers about 52 deg upward but only 7 deg
+    // downward.  Gazebo scenes need more ground returns for low-altitude UAV
+    // mapping, so allow the complete pattern to be pitched down without
+    // changing the CSV or the LiDAR/IMU extrinsic.  Positive pitch rotates a
+    // ray toward -Z in the ROS sensor frame.
+    double vertical_angle_offset_deg = 0.0;
+    if (sdf->HasElement("vertical_angle_offset_deg")) {
+        vertical_angle_offset_deg =
+            sdf->Get<double>("vertical_angle_offset_deg");
+    }
+    const double vertical_angle_offset =
+        vertical_angle_offset_deg * M_PI / 180.0;
+    for (auto &info : aviaInfos) {
+        info.zenith += vertical_angle_offset;
+    }
+    ROS_WARN_STREAM(
+        "Mid360 simulation vertical pattern offset: "
+        << vertical_angle_offset_deg
+        << " deg (positive expands downward coverage)");
+
     ROS_INFO_STREAM("scan info size:" << aviaInfos.size());
     maxPointSize = aviaInfos.size();
 
@@ -485,7 +506,7 @@ void LivoxPointsPlugin::PublishPointCloud2XYZRTLT(std::vector<std::pair<int, Avi
     ros::Time header_timestamp = ros::Time::now();
     auto header_timestamp_sec_nsec = header_timestamp.toNSec();
 
-    
+
     // auto start = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
     for (int i = 0; i < points_pair.size(); ++i) {
         std::pair<int, AviaRotateInfo> &pair = points_pair[i];
@@ -513,14 +534,14 @@ void LivoxPointsPlugin::PublishPointCloud2XYZRTLT(std::vector<std::pair<int, Avi
             auto axis = ray * ignition::math::Vector3d(1.0, 0.0, 0.0);
             auto point = range * axis;
             pcl::LivoxPointXyzrtlt pt;
-            
+
             pt.x = point.X();
             pt.y = point.Y();
             pt.z = point.Z();
             pt.intensity = static_cast<float>(intensity);
             pt.tag = 0;
             pt.line = pair.second.line;
-            pt.timestamp = static_cast<double>(1e9/200000*i)+header_timestamp_sec_nsec;    
+            pt.timestamp = static_cast<double>(1e9/200000*i)+header_timestamp_sec_nsec;
 
             pc.push_back(std::move(pt));
         }
@@ -554,7 +575,7 @@ void LivoxPointsPlugin::PublishLivoxROSDriverCustomMsg(std::vector<std::pair<int
 
     msg.header.frame_id = frameName;
 
-    struct timespec tn; 
+    struct timespec tn;
     clock_gettime(CLOCK_REALTIME, &tn);
 
     msg.timebase = tn.tv_nsec;

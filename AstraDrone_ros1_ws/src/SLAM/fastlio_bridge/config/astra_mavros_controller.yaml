@@ -1,0 +1,31 @@
+enable_control: true       # 仿真闭环开关；真机测试前必须先改为 false 做预览。
+auto_arm: true             # 自动请求 OFFBOARD 并解锁，仅用于 PX4 SITL。
+auto_goal: true
+# true 时最终目标先进入 A*，控制器只追踪规划器给出的前视航点。
+use_path_planner: true
+final_goal_topic: /move_base_simple/goal
+planner_waypoint_topic: /uav1/planner/waypoint
+# relative: 目标是起飞后 FAST-LIO 位置的偏移量；absolute: 目标是固定 map 坐标。
+auto_goal_mode: relative
+relative_goal_x: 0.0
+relative_goal_y: 12.0      # 延长到约 34 s 航行；前半段与 PedSim 的 x 向行人轨迹交叉。
+# 使用 absolute 模式时修改下面三项。Z 是 ENU/map 高度，必须高于地面。
+absolute_goal_x: 0.0
+absolute_goal_y: 12.0
+absolute_goal_z: 1.5
+takeoff_height: 1.5
+prestream_seconds: 3.0
+goal_delay_seconds: 3.0
+position_kp: 0.45
+altitude_kp: 0.8
+max_navigation_speed: 0.35 # 为点云多帧确认和 PX4 刹停预留距离。
+max_total_speed: 0.65      # 限制紧急横移，避免避障后产生过大的惯性偏航。
+max_vertical_speed: 0.5
+avoidance_gain: 1.0        # level 1 以横向避障为主；最终速度仍受 0.65 m/s 限制。
+level1_navigation_scale: 0.15 # level 1 时只保留 15% 目标速度，防止继续冲向交叉点。
+stop_on_level1: true      # 交叉行人场景优先悬停让行；level 2 仍主动逃逸。
+goal_tolerance: 0.25        # 进入该半径后切换 HOLD，保持目标高度并持续悬停。
+takeoff_tolerance: 0.12
+risk_timeout: 0.45         # 感知链超时立即停止 XY 运动。
+odom_timeout: 0.35
+publish_rate: 30.0

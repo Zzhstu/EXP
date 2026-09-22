@@ -1,0 +1,5 @@
+source_timeout: 0.40
+max_avoid_speed: 0.80
+velocity_alpha: 0.25
+static_emergency_weight: 0.60
+dynamic_emergency_weight: 0.40

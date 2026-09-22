@@ -70,7 +70,21 @@
           <samples>20000</samples>
           <downsample>1</downsample>
           <csv_file_name>mid360-real-centr.csv</csv_file_name>
-          <publish_pointcloud_type>3</publish_pointcloud_type>
+          <!--
+            The source scan pattern is approximately -7.2..+52.2 deg in
+            elevation (down..up).  Pitching it down by 15 deg changes the
+            effective coverage to approximately -22.2..+37.2 deg, which gives
+            a low-altitude UAV substantially more floor/low-obstacle returns.
+            Keep this at 0 for a strict physical Mid-360 field of view.
+          -->
+          <vertical_angle_offset_deg>15.0</vertical_angle_offset_deg>
+          <!--
+            Type 2 is sensor_msgs/PointCloud2. FAST-LIO consumes this with
+            preprocess/lidar_type=4 (MARSIM). Type 3 is the simulator's own
+            livox_laser_simulation/CustomMsg and cannot be delivered to a
+            livox_ros_driver/CustomMsg subscriber because its ROS MD5 differs.
+          -->
+          <publish_pointcloud_type>2</publish_pointcloud_type>
           <ros_topic>livox/lidar</ros_topic>
           <frameName>mid360_link</frameName>
         </plugin>

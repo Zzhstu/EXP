@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scenario>
+  <!-- Keep PedSim agents inside the example-world operating area. -->
+  <obstacle x1="-4.8" y1="-4.8" x2="4.8" y2="-4.8"/>
+  <obstacle x1="4.8" y1="-4.8" x2="4.8" y2="4.8"/>
+  <obstacle x1="4.8" y1="4.8" x2="-4.8" y2="4.8"/>
+  <obstacle x1="-4.8" y1="4.8" x2="-4.8" y2="-4.8"/>
+
+  <!--
+    Two pedestrians cross the UAV route once and then remain at the right edge.
+    Do not add the start waypoint again: repeating forever can make a pedestrian
+    re-enter the crossing after the UAV has already committed to the corridor,
+    which is a global scheduling problem rather than one-shot local avoidance.
+  -->
+  <waypoint id="right" x="3.8" y="2.5" r="0.25"/>
+  <agent x="-3.5" y="2.5" n="2" dx="0.8" dy="0" type="3">
+    <addwaypoint id="right"/>
+  </agent>
+</scenario>

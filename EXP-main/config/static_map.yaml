@@ -1,0 +1,13 @@
+cloud_topic: /uav1/fastlio/cloud_map
+objects_topic: /uav1/semantic_dynamic_objects
+output_topic: /uav1/static_map
+world_frame: map
+voxel_size: 0.15
+dynamic_mask_radius: 0.65
+dynamic_mask_half_height: 1.00
+backward_trail_seconds: 1.50
+trail_step: 0.15
+minimum_static_hits: 2
+object_timeout: 0.40
+publish_rate: 2.0
+max_voxels: 500000

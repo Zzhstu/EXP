@@ -1,0 +1,21 @@
+# Dynamic detection must consume the current registered scan, not the
+# accumulated global map, or old points would be processed repeatedly.
+cloud_topic: /uav1/fastlio/registered_scan
+odom_topic: /uav1/fastlio/odom
+output_topic: /uav1/foreground_points
+world_frame: map
+voxel_size: 0.25
+background_frames: 40
+background_neighbor_range: 1
+near_field_range: 3.0
+near_field_background_neighbor_range: 1
+# 无人机前进时会看到初始背景之外的新墙面/树木。连续 20 帧不移动的体素
+# 自动并入背景；这个时间窗应明显长于行人穿过一个 0.25 m 体素的时间。
+enable_online_static_update: true
+online_static_confirm_frames: 20
+max_foreground_gap_frames: 3
+min_relative_z: -0.60
+max_relative_z: 1.20
+# 动态避障只使用近场。缩小 ROI 可避免远处新进入视野的静态结构因
+# 视角/采样变化形成伪动态轨迹，同时仍显著大于 1.8 m 安全半径。
+max_range: 6.0

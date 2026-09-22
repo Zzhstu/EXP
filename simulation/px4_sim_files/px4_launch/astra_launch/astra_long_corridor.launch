@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- Dedicated entry point for the feature-poor FAST-LIO corridor benchmark. -->
+<launch>
+  <arg name="x" default="0"/>
+  <arg name="y" default="0"/>
+  <arg name="z" default="0.06"/>
+  <arg name="Y" default="0"/>
+  <arg name="gui" default="true"/>
+
+  <include file="$(optenv ASTRA_ROOT /home/a/AstraDroneOpen)/simulation/px4_sim_files/px4_launch/astra_launch/astra_example.launch">
+    <arg name="x" value="$(arg x)"/>
+    <arg name="y" value="$(arg y)"/>
+    <arg name="z" value="$(arg z)"/>
+    <arg name="Y" value="$(arg Y)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="world" value="$(optenv ASTRA_ROOT /home/a/AstraDroneOpen)/simulation/astra_gazebo_worlds/fastlio_bench/long_corridor_degenerate.world"/>
+  </include>
+</launch>

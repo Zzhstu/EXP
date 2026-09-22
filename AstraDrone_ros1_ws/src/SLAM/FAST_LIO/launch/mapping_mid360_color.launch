@@ -2,9 +2,14 @@
 <!-- Launch file for Livox MID360 LiDAR -->
 
 	<arg name="rviz" default="false" />
+	<arg name="dynamic_filter" default="true" />
+	<arg name="sim_lidar" default="false" />
 
 	<rosparam command="load" file="$(find fast_lio)/config/mid360_color.yaml" />
 	<rosparam command="load" file="$(find fast_lio)/config/camera_gemini335.yaml" />
+	<!-- Use PointCloud2 from the Gazebo LiDAR plugin when sim_lidar:=true. -->
+	<param name="preprocess/lidar_type" type="int" value="4" if="$(arg sim_lidar)" />
+	<param name="preprocess/lidar_type" type="int" value="1" unless="$(arg sim_lidar)" />
 
 	<param name="feature_extract_enable" type="bool" value="0"/>
 	<param name="point_filter_num" type="int" value="3"/>
@@ -13,6 +18,20 @@
 	<param name="filter_size_map" type="double" value="0.2" />
 	<param name="cube_side_length" type="double" value="1000" />
 	<param name="runtime_pos_log_enable" type="bool" value="0" />
+
+	<!-- Same geometry-only temporal filter as mapping_mid360.launch. -->
+	<param name="dynamic_filter/enable" type="bool" value="$(arg dynamic_filter)" />
+	<param name="dynamic_filter/history_frames" type="int" value="5" />
+	<param name="dynamic_filter/min_history_frames" type="int" value="4" />
+	<param name="dynamic_filter/min_static_observations" type="int" value="3" />
+	<param name="dynamic_filter/min_changed_observations" type="int" value="3" />
+	<param name="dynamic_filter/voxel_size" type="double" value="0.20" />
+	<param name="dynamic_filter/residual_min" type="double" value="0.20" />
+	<param name="dynamic_filter/residual_max" type="double" value="0.60" />
+	<param name="dynamic_filter/residual_range_ratio" type="double" value="0.01" />
+	<param name="dynamic_filter/map_static_distance" type="double" value="0.25" />
+	<param name="dynamic_filter/cluster_tolerance" type="double" value="0.60" />
+	<param name="dynamic_filter/min_cluster_points" type="int" value="3" />
 	
     <node pkg="fast_lio" type="fastlio_mapping_color" name="laserMapping_color" output="screen">
     </node>

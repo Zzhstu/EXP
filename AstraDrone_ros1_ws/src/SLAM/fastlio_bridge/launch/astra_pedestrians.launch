@@ -1,0 +1,17 @@
+<launch>
+  <!--
+    Start only the PedSim simulator. Pedestrian models 0 and 1 are already in
+    example.world; do not run spawn_pedsim_agents.py, because concurrent model
+    insertion and ActorPosesPlugin traversal can segfault Gazebo Classic.
+  -->
+  <arg name="scene_file"
+       default="$(find fastlio_bridge)/config/scenarios/astra_crossing_once.xml"/>
+
+  <include file="$(find pedsim_simulator)/launch/simulator.launch">
+    <arg name="scene_file" value="$(arg scene_file)"/>
+    <arg name="with_robot" value="false"/>
+    <arg name="simulation_factor" value="1.0"/>
+    <arg name="update_rate" value="25.0"/>
+    <arg name="enable_groups" value="false"/>
+  </include>
+</launch>

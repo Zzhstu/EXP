@@ -1,0 +1,55 @@
+# Current map-aligned LiDAR frame. Never point this parameter at output_topic,
+# otherwise the map builder would consume its own accumulated map.
+cloud_topic: /uav1/fastlio/registered_scan
+objects_topic: /uav1/semantic_dynamic_objects
+# Mutable GLOBAL map: every local scan fuses into this map, while confirmed
+# dynamic trajectories delete affected voxels from it.
+output_topic: /uav1/fastlio/cloud_map
+# Compatibility alias for existing bags/RViz configurations.
+legacy_output_topic: /uav1/static_map
+# Conservative map used by the dynamic veto and A* planner. A voxel must be
+# observed repeatedly, so transient pedestrian trails do not become walls.
+stable_output_topic: /uav1/stable_static_map
+# Rolling obstacle map used only for nearby replanning. Points disappear when
+# they leave the UAV radius or have not been observed for local_max_age_frames.
+local_output_topic: /uav1/local_static_map
+# Current LiDAR rays marked as observed free space. The planner uses these rays
+# to override stale global obstacles before the persistent map finishes erasing.
+free_space_output_topic: /uav1/local_free_space
+odom_topic: /uav1/fastlio/odom
+world_frame: map
+voxel_size: 0.15
+dynamic_mask_radius: 0.65
+dynamic_mask_half_height: 1.00
+backward_trail_seconds: 1.50
+trail_step: 0.15
+# Keep the full detected trajectory long enough to erase delayed FAST-LIO
+# returns. Increasing this removes longer trails but delays rebuilding static
+# surfaces which were temporarily covered by a pedestrian.
+dynamic_history_seconds: 20.0
+minimum_static_hits: 2
+# IMPORTANT: hits now means distinct LiDAR frames, not point count in one scan.
+# This is the clean persistent GLOBAL map used by the first-stage A* planner.
+stable_minimum_static_hits: 8
+# The LOCAL map deliberately accepts one-frame obstacles for immediate safety,
+# then expires them after about 1.5 s at a 10 Hz registered-cloud rate.
+local_minimum_hits: 1
+local_max_age_frames: 15
+local_radius: 6.0
+# Negative-observation clearing for objects that were stationary when mapped.
+# A voxel disappears from the persistent map after this many scans see through
+# it. Use >=3 to avoid deleting thin walls because of one sparse scan.
+enable_free_space_clearing: true
+free_space_miss_threshold: 3
+free_space_endpoint_margin: 0.30
+free_space_max_range: 6.0
+free_space_ray_step: 0.15
+# Set this to the LiDAR origin height relative to the odometry body origin if
+# the actual model has a significant vertical mount offset.
+sensor_origin_z_offset: 0.0
+# Bound ray-casting CPU/memory cost for dense MID-360 scans.
+max_free_rays: 8000
+max_free_voxels: 200000
+object_timeout: 0.40
+publish_rate: 2.0
+max_voxels: 500000

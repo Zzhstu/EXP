@@ -275,6 +275,22 @@
       </link>
       <pose>-10.1231 9.61604 0 0 -0 0</pose>
     </model>
+    <!--
+      PedSim agents are preloaded instead of being inserted at run time.
+      The upstream spawn script inserts models while ActorPosesPlugin iterates the
+      Gazebo model list from another thread, which can crash gzserver. Model names
+      must match PedSim agent ids (0 and 1) so ActorPosesPlugin can move them.
+    -->
+    <include>
+      <uri>model://person_standing</uri>
+      <name>0</name>
+      <pose>-3.5 2.5 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://person_standing</uri>
+      <name>1</name>
+      <pose>-2.5 2.5 0 0 0 0</pose>
+    </include>
     <state world_name='default'>
       <sim_time>146 514000000</sim_time>
       <real_time>163 617900913</real_time>
@@ -324,6 +340,8 @@
         <pose>0 0 10 0 -0 0</pose>
       </light>
     </state>
+    <!-- Receives PedSim actor poses so the spawned pedestrians walk in Gazebo. -->
+    <plugin name="ActorPosesPlugin" filename="libActorPosesPlugin.so"/>
     <gui fullscreen='0'>
       <camera name='user_camera'>
         <pose>0.258823 -64.986 57.3033 0 0.779643 1.3522</pose>

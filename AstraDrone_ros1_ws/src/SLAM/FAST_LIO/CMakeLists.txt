@@ -94,3 +94,10 @@ target_include_directories(fastlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
 add_executable(fastlio_mapping_color src/laserMapping_color.cpp include/ikd-Tree/ikd_Tree.cpp src/preprocess.cpp)
 target_link_libraries(fastlio_mapping_color ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} ${OpenCV_LIBRARIES})
 target_include_directories(fastlio_mapping_color PRIVATE ${PYTHON_INCLUDE_DIRS})
+
+# Baseline recorder is a ROS1 Python node; install it so roslaunch can find it
+# from both the source workspace and an installed catkin workspace.
+catkin_install_python(PROGRAMS
+  scripts/fastlio_baseline_recorder.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

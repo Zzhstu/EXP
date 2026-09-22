@@ -8,6 +8,8 @@ project(offboard)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  geometry_msgs
+  mavros_msgs
   roscpp
   rospy
   std_msgs
@@ -151,6 +153,13 @@ target_link_libraries(autoarming_control
 add_executable(keyboard_control src/keyboard_control.cpp)
 add_dependencies(keyboard_control ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(keyboard_control
+  ${catkin_LIBRARIES}
+)
+
+# Deterministic route used by the FAST-LIO long-corridor baseline.
+add_executable(long_corridor_baseline_flight src/long_corridor_baseline_flight.cpp)
+add_dependencies(long_corridor_baseline_flight ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(long_corridor_baseline_flight
   ${catkin_LIBRARIES}
 )
 

@@ -1,0 +1,15 @@
+cloud_topic: /uav1/fastlio/cloud_map
+odom_topic: /uav1/fastlio/odom
+output_topic: /uav1/foreground_points
+world_frame: map
+voxel_size: 0.20
+background_frames: 30
+background_neighbor_range: 1
+near_field_range: 3.0
+near_field_background_neighbor_range: 0
+enable_online_static_update: false
+online_static_confirm_frames: 20
+max_foreground_gap_frames: 3
+min_relative_z: -0.60
+max_relative_z: 1.20
+max_range: 15.0

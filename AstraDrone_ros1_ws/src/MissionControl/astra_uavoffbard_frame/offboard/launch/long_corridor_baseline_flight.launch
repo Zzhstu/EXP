@@ -1,0 +1,21 @@
+<launch>
+  <!-- Keep this node as the only Offboard setpoint publisher during the run. -->
+  <arg name="takeoff_height" default="1.5"/>
+  <arg name="corridor_distance" default="60.0"/>
+  <arg name="cruise_speed" default="0.8"/>
+  <arg name="settle_seconds" default="5.0"/>
+  <arg name="turn_hold_seconds" default="3.0"/>
+  <arg name="max_tracking_error" default="3.0"/>
+  <arg name="auto_arm" default="true"/>
+  <arg name="auto_land" default="true"/>
+  <node pkg="offboard" type="long_corridor_baseline_flight" name="long_corridor_baseline_flight" output="screen">
+    <param name="takeoff_height" value="$(arg takeoff_height)"/>
+    <param name="corridor_distance" value="$(arg corridor_distance)"/>
+    <param name="cruise_speed" value="$(arg cruise_speed)"/>
+    <param name="settle_seconds" value="$(arg settle_seconds)"/>
+    <param name="turn_hold_seconds" value="$(arg turn_hold_seconds)"/>
+    <param name="max_tracking_error" value="$(arg max_tracking_error)"/>
+    <param name="auto_arm" value="$(arg auto_arm)"/>
+    <param name="auto_land" value="$(arg auto_land)"/>
+  </node>
+</launch>
