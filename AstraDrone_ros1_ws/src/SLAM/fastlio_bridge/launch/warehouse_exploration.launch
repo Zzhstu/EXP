@@ -1,0 +1,36 @@
+<launch>
+  <arg name="rviz" default="true"/>
+  <arg name="output"/>
+  <arg name="return_after_goals" default="0"/>
+  <include file="$(find fastlio_bridge)/launch/astra_dynamic_avoidance.launch">
+    <arg name="rviz" value="$(arg rviz)"/>
+    <arg name="rviz_config" value="$(find fastlio_bridge)/rviz/warehouse_exploration.rviz"/>
+    <arg name="auto_goal" value="false"/>
+    <arg name="takeoff_height" value="1.2"/>
+    <arg name="warehouse_narrow" value="true"/>
+    <arg name="enable_path_planner" value="false"/>
+    <arg name="enable_loop_closure" value="false"/>
+  </include>
+  <!-- One waypoint writer. Keep the original controller's 1.5 s planner
+       watchdog + static/dynamic risk guard, but use observed-free exploration. -->
+  <param name="/mavros_avoidance_controller/use_path_planner" value="true"/>
+  <!-- Explorer owns final-arrival decisions. Every controller input remains
+       an intermediate waypoint (3cm tolerance), including 10cm recovery.
+       Do not let an old RViz final goal suppress a short recovery command. -->
+  <param name="/mavros_avoidance_controller/final_goal_topic" value="/uav1/exploration/controller_final_goal_unused"/>
+  <!-- Exploration-only map protection; old badcase/ours settings unchanged. -->
+  <param name="/static_map_builder/evidence_only_clearing" value="true"/>
+  <param name="/static_map_builder/stable_free_miss_threshold" value="6"/>
+  <param name="/static_map_builder/free_evidence_max_gap" value="1.0"/>
+  <param name="/static_map_builder/free_evidence_min_age" value="0.5"/>
+  <param name="/static_map_builder/free_ray_point_tolerance" value="0.06"/>
+  <param name="/static_map_builder/clearing_odom_max_dt" value="0.08"/>
+  <node pkg="fastlio_bridge" type="warehouse_explorer.py" name="warehouse_explorer" output="screen" required="true">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/warehouse_exploration.yaml"/>
+    <param name="report" value="$(arg output)_exploration.json"/>
+    <param name="return_after_goals" value="$(arg return_after_goals)" type="int"/>
+  </node>
+  <node pkg="fastlio_bridge" type="save_navigation_map.py" name="exploration_map_saver" output="screen">
+    <param name="output" value="$(arg output)_final_map.pcd"/>
+  </node>
+</launch>

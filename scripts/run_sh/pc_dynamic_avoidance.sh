@@ -66,7 +66,7 @@ open_terminal "Dynamic Avoidance - Perception and Control" \
 'sleep 14
 source /opt/ros/noetic/setup.bash
 source "$ASTRA_ROOT/AstraDrone_ros1_ws/devel/setup.bash"
-roslaunch fastlio_bridge astra_dynamic_avoidance.launch enable_control:=true auto_arm:=true auto_goal:="$AUTO_GOAL" rviz:=true'
+roslaunch fastlio_bridge astra_dynamic_avoidance.launch enable_control:=true auto_arm:=true auto_goal:="$AUTO_GOAL" enable_loop_closure:=false rviz:=true'
 
 open_terminal "Dynamic Avoidance - Delayed Pedestrians" \
 'sleep 16

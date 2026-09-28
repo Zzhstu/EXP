@@ -50,6 +50,10 @@ AstraDrone_ros1_ws/.catkin_workspace
 *.bag.metadata
 *.db3
 *.mcap
+# Automatically generated comparison reports, plots and process logs live
+# beside large bags; keep the entire run directory out of source commits.
+dynamic_demo_runs/
+exploration_demo_runs/
 
 ### 仿真与传感器缓存 ###
 **/.gazebo/

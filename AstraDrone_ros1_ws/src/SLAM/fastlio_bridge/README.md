@@ -1,5 +1,25 @@
 # Edge UAV Dynamic Perception V1.0
 
+默认启动链路已回到无回环后端的 FAST-LIO2 建图和动态避障。
+当前推荐演示见 [`DYNAMIC_DEMO_CN.md`](DYNAMIC_DEMO_CN.md)：同一世界、
+同一飞行目标下运行 badcase / ours，自动录包并比较地图残影、路径和到达用时。
+此前的回环后端代码暂时保留，但普通 launch 默认不启动；其试验资料仍见
+[`LOOP_CLOSURE_CN.md`](LOOP_CLOSURE_CN.md)。
+
+仓库单行人键盘演示见 [`WAREHOUSE_DEMO_CN.md`](WAREHOUSE_DEMO_CN.md)，入口为 `bash scripts/run_sh/warehouse_dynamic_demo.sh`。包含低顶棚配置、实际飞行结果及已知局限。
+
+当前完整可重复演示：
+
+```bash
+cd /home/a/AstraDroneOpen
+bash scripts/run_sh/dynamic_comparison_demo.sh badcase
+bash scripts/run_sh/dynamic_comparison_demo.sh ours
+```
+
+脚本使用 `example.world` 的两名行人横穿场景、自动起飞与目标导航，生成
+bag、轨迹图和指标报告。两模式均保留风险检测与避障控制；对照仅切换地图清理
+与局部重规划。用于专门研究回环的旧脚本仍可单独运行，但不属于本演示。
+
 这是一个以 FAST-LIO2 为前端、面向 ROS1 Noetic + PX4/Prometheus 的室内无人机动态障碍感知与反应式避障完整基线包。它复用了项目现有节点，并补齐消息、构建系统、统一 launch、静态地图构建、目标导航、可选语义关联、系统诊断和离线校验。
 
 ## 1. V1.0 实现了什么
@@ -166,3 +186,11 @@ rostopic echo /uav1/fused_collision_risk_level
 ## 11. 当前研究边界
 
 V1.0 是一个可闭环运行的几何—运动动态避障基线，并提供了语义关联接口。它不是最终论文算法：下一研究迭代应将当前“初始背景差分”升级为自由空间/遮挡一致性动态检测，并在 Jetson 上接入经过室内数据微调和 TensorRT 优化的轻量语义模型。
+
+## 12. 独立仓库自主探索 demo
+
+在项目根目录运行 `bash scripts/run_sh/warehouse_exploration_demo.sh`。
+自动起飞、基于观测边界选点建图、复用动态地图清理，定时和退出前保存维护PCD。
+正常演示无默认时间上限，暂无可达边界时悬停并保持仿真。
+原仓库指定目标与badcase/ours入口不变；新demo不启用语义网络或回环。
+启动、暂停/恢复、键盘行人、参数与验证边界见 [EXPLORATION_DEMO_CN.md](EXPLORATION_DEMO_CN.md)。

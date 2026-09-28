@@ -1,0 +1,21 @@
+<launch>
+  <node pkg="fastlio_bridge" type="loop_closure_backend_node"
+        name="loop_closure_backend_test" output="screen">
+    <rosparam command="load" file="$(find fastlio_bridge)/config/loop_closure.yaml"/>
+    <param name="odom_topic" value="/test/odom"/>
+    <param name="cloud_topic" value="/test/cloud"/>
+    <param name="keyframe_distance" value="0.45"/>
+    <param name="keyframe_angle_deg" value="8.0"/>
+    <param name="min_loop_time" value="10.0"/>
+    <param name="min_loop_keyframe_gap" value="12"/>
+    <param name="loop_cooldown_keyframes" value="8"/>
+    <param name="loop_search_radius" value="4.0"/>
+    <param name="scan_context_threshold" value="0.35"/>
+    <param name="loop_detection_rate" value="4.0"/>
+    <param name="icp_fitness_threshold" value="0.40"/>
+    <param name="icp_min_overlap" value="0.30"/>
+    <param name="map_publish_rate" value="1.0"/>
+  </node>
+  <node pkg="fastlio_bridge" type="loop_closure_synthetic.py"
+        name="loop_closure_synthetic" output="screen"/>
+</launch>

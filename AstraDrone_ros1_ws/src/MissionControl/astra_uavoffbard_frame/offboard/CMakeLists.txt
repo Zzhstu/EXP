@@ -163,6 +163,13 @@ target_link_libraries(long_corridor_baseline_flight
   ${catkin_LIBRARIES}
 )
 
+# Closed square route used by the repeatable loop-closure benchmark.
+add_executable(loop_closure_demo_flight src/loop_closure_demo_flight.cpp)
+add_dependencies(loop_closure_demo_flight ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(loop_closure_demo_flight
+  ${catkin_LIBRARIES}
+)
+
 # for pub_origin.cpp build0 .exe
 add_executable(pub_origin src/pub_origin.cpp)
 target_link_libraries(pub_origin

@@ -2,6 +2,7 @@
   <arg name="use_px4_initial_alignment" default="false"/>
   <arg name="publish_mavros_vision_pose" default="true"/>
   <arg name="enable_semantic" default="false"/>
+  <arg name="enable_loop_closure" default="false"/>
   <arg name="enable_goal_navigation" default="true"/>
   <arg name="registered_cloud_topic" default="/cloud_registered"/>
   <!-- Safety default: publish previews only. -->
@@ -11,6 +12,7 @@
     <arg name="use_px4_initial_alignment" value="$(arg use_px4_initial_alignment)"/>
     <arg name="publish_mavros_vision_pose" value="$(arg publish_mavros_vision_pose)"/>
     <arg name="enable_semantic" value="$(arg enable_semantic)"/>
+    <arg name="enable_loop_closure" value="$(arg enable_loop_closure)"/>
     <arg name="registered_cloud_topic" value="$(arg registered_cloud_topic)"/>
   </include>
   <include file="$(find fastlio_bridge)/launch/avoidance.launch">

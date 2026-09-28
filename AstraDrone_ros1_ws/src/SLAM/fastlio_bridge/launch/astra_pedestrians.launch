@@ -7,6 +7,9 @@
   <arg name="scene_file"
        default="$(find fastlio_bridge)/config/scenarios/astra_crossing_once.xml"/>
 
+  <group>
+  <!-- Single pose owner: relay passes through until keyboard takeover. -->
+  <remap from="/pedsim_simulator/simulated_agents" to="/demo/pedestrian/scripted_agents"/>
   <include file="$(find pedsim_simulator)/launch/simulator.launch">
     <arg name="scene_file" value="$(arg scene_file)"/>
     <arg name="with_robot" value="false"/>
@@ -14,4 +17,6 @@
     <arg name="update_rate" value="25.0"/>
     <arg name="enable_groups" value="false"/>
   </include>
+  </group>
+  <node pkg="fastlio_bridge" type="pedestrian_control.py" name="pedestrian_relay" output="screen" required="true"/>
 </launch>

@@ -22,6 +22,9 @@ local_planning_margin: 2.5
 # global occupied - local free + local occupied. This allows an immediate
 # shortcut when a stale person/ghost obstacle is observed to have disappeared.
 local_replan_to_final_goal: true
+# Demo ablation switch: false follows only global A* on persistent occupancy.
+# true also allows visible local free space to reopen a globally blocked route.
+enable_local_replanning: true
 local_free_clear_radius: 0.15
 # Only map points crossing the UAV body at flight altitude become 2-D obstacles;
 # this excludes the ground and high tree canopy from the navigation grid.

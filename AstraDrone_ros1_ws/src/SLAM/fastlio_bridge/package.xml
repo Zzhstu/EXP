@@ -19,6 +19,14 @@
   <depend>pcl_ros</depend>
   <depend>roscpp</depend>
   <exec_depend>rospy</exec_depend>
+  <!-- Demo runner tracks native rosbag record and validates its final index. -->
+  <exec_depend>rosbag</exec_depend>
+  <exec_depend>rosgraph</exec_depend>
+  <exec_depend>roslib</exec_depend>
+  <!-- Optional simulation relay imports these at runtime, not during C++ build. -->
+  <exec_depend>pedsim_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>gazebo_msgs</exec_depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>

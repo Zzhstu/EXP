@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+#include <set>
 
 #include <visualization_msgs/MarkerArray.h>
 #include <visualization_msgs/Marker.h>
@@ -18,7 +19,7 @@ DynamicMarker()
     sub_ =
         nh.subscribe(
             "/uav1/dynamic_objects",
-            10,
+            1,
             &DynamicMarker::callback,
             this
         );
@@ -27,7 +28,7 @@ DynamicMarker()
     pub_ =
         nh.advertise<visualization_msgs::MarkerArray>(
             "/uav1/dynamic_markers",
-            10
+            1
         );
 
 
@@ -42,7 +43,7 @@ const fastlio_bridge::DynamicObjectArray::ConstPtr& msg)
     visualization_msgs::MarkerArray array;
 
 
-    int id=0;
+    std::set<int> current;
 
 
     for(auto& obj:msg->objects)
@@ -55,7 +56,9 @@ const fastlio_bridge::DynamicObjectArray::ConstPtr& msg)
 
         marker.ns="dynamic_object";
 
-        marker.id=id++;
+        marker.id=obj.id; // Use stable track ID rather than array index.
+        current.insert(obj.id);
+        marker.lifetime=ros::Duration(0.5); // Expire even if upstream stops.
 
 
         marker.type =
@@ -79,6 +82,7 @@ const fastlio_bridge::DynamicObjectArray::ConstPtr& msg)
 
         marker.color.a=1.0;
         marker.color.r=1.0;
+        marker.color.g=obj.predicted ? 0.6 : 0.0;
 
 
         array.markers.push_back(marker);
@@ -86,6 +90,16 @@ const fastlio_bridge::DynamicObjectArray::ConstPtr& msg)
     }
 
 
+    for (int id : previous_) {
+        if (current.count(id)) continue;
+        visualization_msgs::Marker marker;
+        marker.header=msg->header;
+        marker.ns="dynamic_object";
+        marker.id=id;
+        marker.action=visualization_msgs::Marker::DELETE;
+        array.markers.push_back(marker);
+    }
+    previous_=current;
     pub_.publish(array);
 
 }
@@ -93,6 +107,7 @@ const fastlio_bridge::DynamicObjectArray::ConstPtr& msg)
 
 
 private:
+std::set<int> previous_;
 
 ros::Subscriber sub_;
 

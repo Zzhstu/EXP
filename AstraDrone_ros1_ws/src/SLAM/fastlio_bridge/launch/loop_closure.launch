@@ -1,0 +1,10 @@
+<launch>
+  <arg name="enabled" default="false"/>
+  <arg name="config" default="$(find fastlio_bridge)/config/loop_closure.yaml"/>
+  <!-- Optimized topics stay separate from PX4 control odometry. -->
+  <node if="$(arg enabled)" pkg="fastlio_bridge"
+        type="loop_closure_backend_node" name="loop_closure_backend"
+        output="screen">
+    <rosparam command="load" file="$(arg config)"/>
+  </node>
+</launch>

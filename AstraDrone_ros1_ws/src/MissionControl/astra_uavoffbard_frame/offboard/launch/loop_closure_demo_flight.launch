@@ -1,0 +1,17 @@
+<launch>
+  <!-- Route is relative to the vehicle's startup local pose. -->
+  <arg name="side_length" default="10.0"/>
+  <arg name="takeoff_height" default="2.5"/>
+  <arg name="cruise_speed" default="0.75"/>
+  <node pkg="offboard" type="loop_closure_demo_flight"
+        name="loop_closure_demo_flight" output="screen">
+    <param name="side_length" value="$(arg side_length)"/>
+    <param name="takeoff_height" value="$(arg takeoff_height)"/>
+    <param name="cruise_speed" value="$(arg cruise_speed)"/>
+    <param name="settle_seconds" value="5.0"/>
+    <param name="corner_hold_seconds" value="1.5"/>
+    <!-- Do not shorten below one backend cycle; this hold supplies several
+         complete scans at the revisited start position. -->
+    <param name="final_hold_seconds" value="12.0"/>
+  </node>
+</launch>

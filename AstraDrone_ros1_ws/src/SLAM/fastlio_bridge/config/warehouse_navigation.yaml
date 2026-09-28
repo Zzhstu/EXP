@@ -1,0 +1,35 @@
+# cangku 仓库低速窄通道配置，仅用于 Gazebo SITL，未验证真机安全。
+# 此文件按节点命名空间覆盖基础 YAML；原 example 不加载此文件。
+# 所有长度单位为 m。不要用缩小机体半径的方法假装能通过窄缝。
+static_path_planner:
+  # Retry 4 -> 8 -> 12 m bounds when shelves cut off the smaller search box.
+  # Expands search only, not free space; still limited by max_grid_cells.
+  max_planning_margin: 12.0
+  # 旧路线每段仍须通过当前栅格检查；安全时只有缩短>=25%才切换绕行方向。
+  # 新障碍使旧路线失效则立即重规划；真实新目标清除旧路线。0关闭此滞回。
+  route_switch_improvement: 0.25
+  resolution: 0.10
+  # 机心到障碍表面的规划距离，已包含机体，不应再加一次 uav_radius。
+  # 栅格还增加半对角线余量约0.071m；实际可通宽度取决于格子对齐/点云。
+  inflation_radius: 0.80
+  lookahead_distance: 0.60
+  start_clearance_radius: 0.20
+  # 碰撞体高度包络加余量；原±0.80m在低顶棚下把安全上方屋顶投成假墙。
+  # 不是删除地图/屋顶，只调整二维规划切片。无自动升降绕障功能。
+  obstacle_min_relative_z: -0.45
+  obstacle_max_relative_z: 0.55
+
+static_collision_risk:
+  # iris旋翼外包络约 hypot(0.13,0.22)+0.128=0.384m，圆近似取0.40。
+  # clearance 是扣除下列半径后的距离，不是机心到货架的距离。
+  uav_radius: 0.40
+  safe_clearance: 0.30       # level1: 机心距表面 <0.70m，原为0.90m
+  emergency_clearance: 0.25 # level2: <0.65m，保留原机心紧急距离
+  exit_clearance: 0.35       # 预警解除: >=0.75m，留0.05m滞回防抖
+
+mavros_avoidance_controller:
+  max_navigation_speed: 0.25 # 原0.35m/s；缩小规划余量同时减速
+  stop_on_level1: true      # 保留行人停车让行，不直接改成false硬挤
+  static_recovery_speed: 0.10 # 仅静态预警且新扫描退让净空检查通过才退让
+  recovery_surface_distance: 0.65 # 与静态紧急机心距离保持一致
+  recovery_horizon: 1.0

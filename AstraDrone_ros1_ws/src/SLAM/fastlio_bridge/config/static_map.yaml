@@ -27,6 +27,9 @@ trail_step: 0.15
 # returns. Increasing this removes longer trails but delays rebuilding static
 # surfaces which were temporarily covered by a pedestrian.
 dynamic_history_seconds: 20.0
+# Demo ablation switch: false retains old moving-person points in this map.
+# Dynamic detection and the reactive safety controller still run unchanged.
+enable_dynamic_map_clearing: true
 minimum_static_hits: 2
 # IMPORTANT: hits now means distinct LiDAR frames, not point count in one scan.
 # This is the clean persistent GLOBAL map used by the first-stage A* planner.

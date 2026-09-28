@@ -70,7 +70,7 @@ Visualization Manager:
       Invert Rainbow: false
       Max Color: 70; 210; 120
       Min Color: 70; 210; 120
-      Name: Clean global static map
+      Name: Navigation map (clearing depends on demo mode)
       Position Transformer: XYZ
       Queue Size: 2
       Selectable: true

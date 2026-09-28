@@ -64,6 +64,7 @@ add_fastlio_node(static_collision_risk_node static_collision_risk.cpp)
 add_fastlio_node(avoidance_fusion_node avoidance_fusion.cpp)
 add_fastlio_node(static_map_builder_node static_map_builder.cpp)
 add_fastlio_node(static_path_planner_node static_path_planner.cpp)
+add_fastlio_node(loop_closure_backend_node loop_closure_backend.cpp)
 add_fastlio_node(system_watchdog_node system_watchdog.cpp)
 add_fastlio_node(semantic_fusion_node semantic_fusion.cpp)
 add_fastlio_node(mavros_avoidance_controller_node mavros_avoidance_controller.cpp)
@@ -90,6 +91,7 @@ install(TARGETS
   collision_risk_node static_collision_risk_node avoidance_fusion_node
   static_map_builder_node system_watchdog_node semantic_fusion_node
   static_path_planner_node
+  loop_closure_backend_node
   mavros_avoidance_controller_node
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
@@ -100,7 +102,16 @@ endif()
 install(DIRECTORY launch config rviz
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 catkin_install_python(PROGRAMS
+  scripts/exploration_grid.py
+  scripts/warehouse_explorer.py
+  scripts/exploration_pedestrian_walk.py
+  scripts/warehouse_scene.py
+  scripts/warehouse_pedestrian.py
+  scripts/pedestrian_control.py
+  scripts/save_navigation_map.py
   scripts/validate_project.py
+  scripts/analyze_loop_closure_bag.py
   test/synthetic_scene.py
+  test/loop_closure_synthetic.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

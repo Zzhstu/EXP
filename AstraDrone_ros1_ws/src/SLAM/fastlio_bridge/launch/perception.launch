@@ -2,6 +2,9 @@
   <arg name="use_px4_initial_alignment" default="false"/>
   <arg name="publish_mavros_vision_pose" default="true"/>
   <arg name="enable_semantic" default="false"/>
+  <arg name="enable_loop_closure" default="false"/>
+  <arg name="enable_dynamic_map_clearing" default="true"/>
+  <arg name="enable_free_space_clearing" default="true"/>
   <arg name="registered_cloud_topic" default="/cloud_registered"/>
 
   <node pkg="fastlio_bridge" type="fastlio_bridge_node"
@@ -53,5 +56,11 @@
   <node pkg="fastlio_bridge" type="static_map_builder_node"
         name="static_map_builder" output="screen">
     <rosparam command="load" file="$(find fastlio_bridge)/config/static_map.yaml"/>
+    <param name="enable_dynamic_map_clearing" value="$(arg enable_dynamic_map_clearing)"/>
+    <param name="enable_free_space_clearing" value="$(arg enable_free_space_clearing)"/>
   </node>
+
+  <include file="$(find fastlio_bridge)/launch/loop_closure.launch">
+    <arg name="enabled" value="$(arg enable_loop_closure)"/>
+  </include>
 </launch>

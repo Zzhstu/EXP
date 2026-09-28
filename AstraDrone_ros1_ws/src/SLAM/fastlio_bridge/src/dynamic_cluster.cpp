@@ -120,7 +120,7 @@ public:
 
         sub_ = nh_.subscribe(
             "/uav1/foreground_points",
-            2,
+            1,
             &DynamicCluster::callback,
             this
         );
@@ -167,6 +167,8 @@ public:
         pnh_.param("horizontal_motion_only",
                    horizontal_motion_only_, true);
         pnh_.param("velocity_history_size", velocity_history_size_, 12);
+        pnh_.param("motion_position_alpha", motion_position_alpha_, 0.20);
+        motion_position_alpha_ = std::max(0.01, std::min(1.0, motion_position_alpha_));
         pnh_.param("position_alpha", position_alpha_, 0.25);
         pnh_.param("velocity_alpha", velocity_alpha_, 0.20);
         pnh_.param(
@@ -965,8 +967,9 @@ private:
                 // 位置低通滤波
                 //
                 // filtered =
-                //     0.8 * old
-                //   + 0.2 * measurement
+                //     (1-position_alpha_) * old
+                //   + position_alpha_ * measurement
+                // 输出位置使用较快低通；下方运动判定历史独立平滑。
                 // -------------------------------------------------
 
                 Eigen::Vector3d filtered_position =
@@ -988,7 +991,10 @@ private:
 
                 track.history.emplace_back(
                     msg->header.stamp.toSec(),
-                    filtered_position
+                    // Robust motion evidence is independent of output smoothing.
+                    (1.0 - motion_position_alpha_) *
+                        (track.history.empty() ? track.center : track.history.back().second)
+                        + motion_position_alpha_ * raw_position
                 );
 
 
@@ -1185,7 +1191,7 @@ private:
 
 
                 // -------------------------------------------------
-                // 连续10帧不明显运动 -> 静态
+                // 连续 static_confirm_frames_ 帧不明显运动 -> 静态
                 // -------------------------------------------------
 
                 if (
@@ -1778,6 +1784,7 @@ private:
     // =========================================================
 
     int velocity_history_size_;
+    double motion_position_alpha_{0.20};
 
     double position_alpha_;
 

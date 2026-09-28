@@ -1,0 +1,31 @@
+<launch>
+  <arg name="rviz" default="true"/>
+  <arg name="config" default="$(find fastlio_bridge)/config/loop_closure.yaml"/>
+
+  <!-- Align map once to PX4/Gazebo, but never feed optimized poses back into
+       PX4 during this benchmark. This avoids an estimator feedback loop. -->
+  <node pkg="fastlio_bridge" type="fastlio_bridge_node"
+        name="fastlio_bridge" output="screen">
+    <param name="use_px4_initial_alignment" value="true"/>
+    <param name="publish_mavros_vision_pose" value="false"/>
+    <param name="path_topic" value="/uav1/fastlio/path"/>
+    <param name="path_decimation" value="5"/>
+    <param name="max_path_poses" value="12000"/>
+    <remap from="/uav1/mavros/local_position/pose" to="/mavros/local_position/pose"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="cloud_bridge_node"
+        name="fastlio_cloud_bridge" output="screen">
+    <param name="use_px4_initial_alignment" value="true"/>
+    <param name="output_topic" value="/uav1/fastlio/registered_scan"/>
+    <remap from="/uav1/mavros/local_position/pose" to="/mavros/local_position/pose"/>
+  </node>
+
+  <node pkg="fastlio_bridge" type="loop_closure_backend_node"
+        name="loop_closure_backend" output="screen">
+    <rosparam command="load" file="$(arg config)"/>
+  </node>
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="loop_closure_rviz"
+        args="-d $(find fastlio_bridge)/rviz/loop_closure.rviz"/>
+</launch>

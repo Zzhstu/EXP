@@ -1,0 +1,77 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: map
+    Frame Rate: 20
+    Background Color: 30; 30; 30
+  Displays:
+    - Class: rviz/Grid
+      Name: Ground
+      Enabled: true
+      Cell Size: 1
+      Plane Cell Count: 70
+    - Class: rviz/PointCloud2
+      Name: Maintained map - saved PCD source
+      Enabled: true
+      Topic: /uav1/fastlio/cloud_map
+      Queue Size: 1
+      Position Transformer: XYZ
+      Color Transformer: AxisColor
+      Axis: Z
+      Style: Points
+      Size (Pixels): 2
+      Alpha: 1
+    - Class: rviz/PointCloud2
+      Name: Current returns
+      Enabled: true
+      Topic: /uav1/fastlio/registered_scan
+      Queue Size: 1
+      Position Transformer: XYZ
+      Color Transformer: FlatColor
+      Color: 255; 220; 80
+      Style: Points
+      Size (Pixels): 2
+      Alpha: 0.5
+    - Class: rviz/Path
+      Name: UAV flown trajectory
+      Enabled: true
+      Topic: /uav1/fastlio/path
+      Color: 50; 220; 255
+      Line Style: Billboards
+      Line Width: 0.05
+    - Class: rviz/Path
+      Name: Observed-free exploration route
+      Enabled: true
+      Topic: /uav1/planner/local_path
+      Color: 255; 70; 190
+      Line Style: Billboards
+      Line Width: 0.05
+    - Class: rviz/MarkerArray
+      Name: Frontier viewpoints and state
+      Enabled: true
+      Marker Topic: /uav1/exploration/markers
+    - Class: rviz/MarkerArray
+      Name: Dynamic people
+      Enabled: true
+      Marker Topic: /uav1/dynamic_markers
+    - Class: rviz/Map
+      Name: Observed free unknown occupied (optional)
+      Enabled: false
+      Topic: /uav1/exploration/grid
+      Alpha: 0.4
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 28
+      Pitch: 1.1
+      Yaw: 3.14
+      Focal Point:
+        X: 5
+        Y: 3
+        Z: 0
+Window Geometry:
+  Width: 1250
+  Height: 900

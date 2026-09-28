@@ -1,0 +1,33 @@
+FAST-LIO2 loop-closure evaluation
+bag: /home/a/AstraDroneOpen/loop_closure_runs/loop_closure_20260923_182256.bag
+ground-truth model: iris_mid360
+
+RAW samples: 1772 (177.1 s, truth path 51.10 m)
+RAW ATE aligned RMSE/mean/max: 0.0113 / 0.0081 / 0.0391 m
+RAW ATE without frame alignment RMSE: 0.1493 m
+RAW translational RPE (5 s) RMSE: 0.0097 m
+RAW end-to-start displacement error: 0.0333 m
+
+OPTIMIZED samples: 1772 (177.1 s, truth path 51.10 m)
+OPTIMIZED ATE aligned RMSE/mean/max: 0.0478 / 0.0401 / 0.1204 m
+OPTIMIZED ATE without frame alignment RMSE: 0.1725 m
+OPTIMIZED translational RPE (5 s) RMSE: 0.0289 m
+OPTIMIZED end-to-start displacement error: 0.0873 m
+
+ATE RMSE change: 0.0365 m (+323.5%; negative is improvement)
+Closure displacement change: 0.0540 m
+accepted loop constraints: 2
+diagnostic keyframes: 58
+diagnostic graph_edges: 59
+diagnostic no_spatial_candidates: 10
+diagnostic rejected_scan_context: 0
+diagnostic icp_attempts: 4
+diagnostic rejected_icp: 0
+diagnostic optimizer_failures: 0
+diagnostic last_stage: accepted
+diagnostic last_spatial_distance_m: 0.695632
+diagnostic last_scan_context_score: 0.110050
+diagnostic last_sector_shift_deg: 330.000000
+diagnostic last_icp_fitness: 0.016938
+diagnostic last_icp_overlap: 1.000000
+diagnostic last_processing_ms: 1037.783025

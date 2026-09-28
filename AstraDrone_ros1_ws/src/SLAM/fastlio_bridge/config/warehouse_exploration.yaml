@@ -1,0 +1,37 @@
+# Independent demo only. Map axes are FAST-LIO aligned ENU, not Gazebo world.
+# Broad mission fence, not a privileged obstacle map; tune if spawn changes.
+bounds: [-4.0, -12.0, 47.0, 15.0]
+resolution: 0.20
+# Total body-centre clearance includes ~0.40 m rotor envelope. Quantization
+# half-diagonal is added by the grid. Do not reduce to make a bad path pass.
+clearance: 0.80
+unknown_margin: 0.40
+# Recovery only, NOT a smaller planning radius: if already pushed into the
+# inflated margin, allow an observed-space retreat whose raw-point clearance
+# never decreases. 0.70 matches the warehouse reactive warning centre distance.
+# Each recovery command is <=0.10m, and ordinary .80m inflation is unchanged.
+recovery_minimum_clearance: 0.70
+height_below: 0.45
+height_above: 0.55
+lookahead: 0.60
+arrival_tolerance: 0.30
+settle_seconds: 3.0
+progress_timeout: 25.0
+blacklist_seconds: 60.0
+# Fixed altitude is captured after takeoff and never follows odometry drift.
+takeoff_relative_height: 1.2
+planning_hz: 2.0
+input_timeout_wall: 3.0
+input_timeout_sim: 1.5          # reject timer-republished old acquisition data
+no_frontier_seconds: 30.0
+save_every_wall_seconds: 60.0
+# Mission state: frontier -> close-range inspection -> return -> settle -> save.
+# 0 disables the explicit goal limit (useful for short lifecycle regression).
+return_after_goals: 0
+max_target_attempts: 2
+inspection_radius: 2.0          # metres; no marking through an occupied aisle
+inspection_surface_range: 3.0   # inspect reachable space near measured surfaces
+home_tolerance: 0.30            # metres XY; not the final map accuracy
+home_settle_seconds: 5.0        # continuous in-radius dwell, reset on departure
+max_mission_seconds: 3600.0     # sim seconds; budget => PARTIAL coverage + return
+return_timeout: 1200.0         # blocked return => failed, never false success

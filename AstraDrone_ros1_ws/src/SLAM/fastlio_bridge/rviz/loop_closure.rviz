@@ -1,0 +1,190 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Selection
+    Name: Selection
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz/Grid
+      Color: 90; 90; 96
+      Enabled: true
+      Name: Ground grid
+      Plane: XY
+      Plane Cell Count: 40
+      Reference Frame: map
+      Value: true
+    - Alpha: 0.85
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -2
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 185; 185; 185
+      Color Transformer: AxisColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 30; 30; 30
+      Name: Loop-corrected map
+      Position Transformer: XYZ
+      Queue Size: 3
+      Selectable: true
+      Size (Pixels): 2
+      Size (m): 0.04
+      Style: Flat Squares
+      Topic: /uav1/loop_closure/map
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 0.55
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -2
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 80; 170; 255
+      Color Transformer: FlatColor
+      Decay Time: 1
+      Enabled: true
+      Name: Current corrected scan
+      Position Transformer: XYZ
+      Queue Size: 3
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.05
+      Style: Flat Squares
+      Topic: /uav1/loop_closure/registered_scan
+      Unreliable: false
+      Use Fixed Frame: true
+      Value: true
+    - Alpha: 0.8
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 255; 190; 20
+      Enabled: true
+      Head Diameter: 0.2
+      Head Length: 0.2
+      Length: 0.3
+      Line Style: Lines
+      Line Width: 0.04
+      Name: Raw FAST-LIO keyframes
+      Offset: {X: 0, Y: 0, Z: 0}
+      Pose Color: 255; 190; 20
+      Pose Style: None
+      Queue Size: 2
+      Radius: 0.03
+      Shaft Diameter: 0.08
+      Shaft Length: 0.2
+      Topic: /uav1/loop_closure/raw_path
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 30; 255; 80
+      Enabled: true
+      Head Diameter: 0.2
+      Head Length: 0.2
+      Length: 0.3
+      Line Style: Billboards
+      Line Width: 0.10
+      Name: Optimized keyframe path
+      Offset: {X: 0, Y: 0, Z: 0}
+      Pose Color: 30; 255; 80
+      Pose Style: None
+      Queue Size: 2
+      Radius: 0.03
+      Shaft Diameter: 0.08
+      Shaft Length: 0.2
+      Topic: /uav1/loop_closure/path
+      Unreliable: false
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /uav1/loop_closure/constraints
+      Name: Pose-graph constraints
+      Namespaces: {}
+      Queue Size: 10
+      Value: true
+    - Angle Tolerance: 0.02
+      Class: rviz/Odometry
+      Covariance:
+        Orientation: {Alpha: 0.2, Color: "255; 255; 127", Color Style: Unique, Frame: Local, Offset: 1, Scale: 1, Value: false}
+        Position: {Alpha: 0.2, Color: "204; 51; 204", Scale: 1, Value: false}
+        Value: false
+      Enabled: true
+      Keep: 1
+      Name: Optimized UAV pose
+      Position Tolerance: 0.02
+      Queue Size: 5
+      Shape:
+        Alpha: 1
+        Axes Length: 0.8
+        Axes Radius: 0.08
+        Color: 255; 255; 255
+        Head Length: 0.2
+        Head Radius: 0.1
+        Shaft Length: 0.5
+        Shaft Radius: 0.05
+        Value: Axes
+      Topic: /uav1/loop_closure/odom
+      Unreliable: false
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 10; 11; 15
+    Default Light: true
+    Fixed Frame: map
+    Frame Rate: 20
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 25
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Field of View: 0.785
+      Focal Point: {X: 5, Y: 5, Z: 1}
+      Name: Top oblique
+      Near Clip Distance: 0.01
+      Pitch: 0.75
+      Target Frame: map
+      Yaw: 4.0
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd0000000400000000000001900000034afc0200000001fb000000100044006900730070006c006100790073010000003d0000034a000000c900ffffff00000003000006400000003efc0100000001fb0000000a005600690065007700730000000000000640000000a000ffffff0000050a0000034a00000004000000040000000800000008fc00000000
+  Selection:
+    collapsed: false
+  Views:
+    collapsed: false
+  Width: 1600
+  X: 60
+  Y: 40

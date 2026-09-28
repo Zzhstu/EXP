@@ -9,9 +9,8 @@ background_frames: 40
 background_neighbor_range: 1
 near_field_range: 3.0
 near_field_background_neighbor_range: 1
-# 无人机前进时会看到初始背景之外的新墙面/树木。连续 20 帧不移动的体素
-# 自动并入背景；这个时间窗应明显长于行人穿过一个 0.25 m 体素的时间。
-enable_online_static_update: true
+# 不永久吸收暂停/反复行走的行人；静态误检仍由聚类运动确认与地图支持抑制。
+enable_online_static_update: false
 online_static_confirm_frames: 20
 max_foreground_gap_frames: 3
 min_relative_z: -0.60

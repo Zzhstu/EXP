@@ -1,0 +1,59 @@
+digraph OursDemo {
+  graph [label="ours demo：无回环的感知—地图—规划—控制数据流",
+         labelloc=t, fontsize=22, fontname="Noto Sans CJK SC", rankdir=TB,
+         splines=polyline, nodesep=0.4, ranksep=0.7, pad=0.25];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5fb",
+        color="#5480a3", fontname="Noto Sans CJK SC", fontsize=11];
+  edge [color="#4d6474", fontname="Noto Sans CJK SC", fontsize=9];
+
+  sim [label="Gazebo example.world\nPX4 SITL + PedSim", fillcolor="#e5f1e0"];
+  lidar [label="MID360 仿真雷达\n/livox/lidar + /livox/imu"];
+  lio [label="FAST-LIO2 前端\nIMU传播 + 激光匹配\n本demo dynamic_filter=false"];
+  bridge [label="位姿/点云坐标桥\nFAST-LIO → map"];
+  scan [label="当前注册扫描\n/uav1/fastlio/registered_scan", fillcolor="#fff4d9"];
+  odom [label="连续定位\n/uav1/fastlio/odom", fillcolor="#fff4d9"];
+
+  detector [label="体素背景/前景检测\n/uav1/foreground_points"];
+  cluster [label="欧氏聚类 + 时序轨迹确认\n/uav1/dynamic_objects"];
+  semantic [label="语义透传\n相机语义禁用\n/uav1/semantic_dynamic_objects"];
+  map [label="动态轨迹清理 + 自由射线证据\n持续/稳定/局部/自由视图", fillcolor="#e6f3eb"];
+  planner [label="高度带二维栅格 A*\n全局 + 局部重规划\n/uav1/planner/waypoint", fillcolor="#e6f3eb"];
+  dynrisk [label="动态目标 CPA 风险\n/uav1/collision_risk_level"];
+  staticrisk [label="当前扫描静态近场风险\n/uav1/static_collision_risk_level"];
+  fusion [label="风险与避障速度融合\n/uav1/fused_*", fillcolor="#fbe8e6"];
+  control [label="MAVROS OFFBOARD 控制\n到达后 HOLD 悬停", fillcolor="#fbe8e6"];
+  predictor [label="0.5 s 恒速外推\n侧路诊断/可视化", fillcolor="#f2f2f2"];
+  viz [label="RViz + rosbag + 离线指标\n观察/评测，不闭环控制", fillcolor="#f2f2f2"];
+
+  sim -> lidar;
+  lidar -> lio;
+  lio -> bridge [label="/Odometry + /cloud_registered"];
+  bridge -> scan;
+  bridge -> odom;
+  scan -> detector;
+  scan -> map;
+  scan -> staticrisk;
+  odom -> detector;
+  odom -> map;
+  odom -> planner;
+  odom -> dynrisk;
+  odom -> staticrisk;
+  odom -> control;
+  detector -> cluster;
+  cluster -> semantic;
+  map -> cluster [label="稳定地图否决假动态", constraint=false];
+  semantic -> map [label="动态轨迹"];
+  semantic -> dynrisk;
+  semantic -> staticrisk [label="动态目标掩膜"];
+  semantic -> predictor [style=dashed, constraint=false];
+  map -> planner [label="稳定占用 + 局部占用/自由"];
+  planner -> control [label="前视航点"];
+  dynrisk -> fusion;
+  staticrisk -> fusion;
+  fusion -> control;
+  control -> sim [label="MAVROS速度指令", color="#cc5347", constraint=false];
+  map -> viz [style=dashed, constraint=false];
+  planner -> viz [style=dashed, constraint=false];
+  predictor -> viz [style=dashed, constraint=false];
+  odom -> viz [style=dashed, constraint=false];
+}

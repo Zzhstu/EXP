@@ -21,6 +21,9 @@ def main():
         "msg/DynamicObject.msg", "msg/DynamicObjectArray.msg",
         "msg/SemanticDetection2D.msg", "msg/SemanticDetection2DArray.msg",
         "launch/complete_system.launch", "launch/perception.launch",
+        "launch/loop_closure.launch", "launch/loop_closure_demo.launch",
+        "config/loop_closure.yaml", "rviz/loop_closure.rviz",
+        "scripts/analyze_loop_closure_bag.py",
         "launch/avoidance.launch", "config/dynamic_detector.yaml",
         "config/dynamic_cluster.yaml", "config/dynamic_risk.yaml",
         "config/static_risk.yaml", "config/static_map.yaml",
@@ -28,6 +31,7 @@ def main():
         "src/dynamic_detector.cpp", "src/dynamic_cluster.cpp",
         "src/collision_risk.cpp", "src/static_collision_risk.cpp",
         "src/avoidance_fusion.cpp", "src/static_map_builder.cpp",
+        "src/loop_closure_backend.cpp",
         "src/system_watchdog.cpp",
     ]
     for relative in required:
@@ -99,6 +103,33 @@ def main():
     require(re.search(r"^local_replan_to_final_goal:\s*true\s*$",
                       planner, re.MULTILINE),
             "corrected planner must re-optimize to the final goal")
+
+    # Loop closure must remain conservative and must not overwrite the raw
+    # flight-control topics before closed-loop validation.
+    loop_config = (ROOT / "config/loop_closure.yaml").read_text()
+    loop_values = {}
+    for key in ("min_loop_time", "min_loop_keyframe_gap",
+                "loop_cooldown_keyframes", "scan_context_threshold",
+                "icp_min_overlap", "max_loop_vertical_separation"):
+        match = re.search(rf"^{key}:\s*([0-9.]+)", loop_config, re.MULTILINE)
+        require(match, f"missing loop threshold {key}")
+        loop_values[key] = float(match.group(1))
+    require(loop_values["min_loop_time"] >= 5.0,
+            "loop time guard is too small")
+    require(loop_values["min_loop_keyframe_gap"] >= 5.0,
+            "loop keyframe gap is too small")
+    require(loop_values["loop_cooldown_keyframes"] >= 1.0,
+            "loop cooldown must be enabled")
+    require(loop_values["scan_context_threshold"] <= 0.4,
+            "Scan Context gate is dangerously permissive")
+    require(loop_values["icp_min_overlap"] >= 0.2,
+            "ICP overlap gate is too weak")
+    require(loop_values["max_loop_vertical_separation"] <= 2.0,
+            "UAV loop vertical-separation gate is too permissive")
+    require(re.search(
+        r"^optimized_odom_topic:\s*/uav1/loop_closure/odom\s*$",
+        loop_config, re.MULTILINE),
+        "optimized odometry must stay separate from control odometry")
 
     print("PASS: package structure, XML, messages, targets and safety defaults")
     return 0

@@ -1,0 +1,74 @@
+# FAST-LIO2 loop backend: distance candidate -> Scan Context -> ICP -> pose graph.
+odom_topic: /uav1/fastlio/odom
+cloud_topic: /uav1/fastlio/registered_scan
+world_frame: map
+optimized_odom_topic: /uav1/loop_closure/odom
+corrected_scan_topic: /uav1/loop_closure/registered_scan
+optimized_map_topic: /uav1/loop_closure/map
+optimized_path_topic: /uav1/loop_closure/path
+raw_keyframe_path_topic: /uav1/loop_closure/raw_path
+
+# Dense keyframes improve ICP but increase RAM and optimization cost.
+keyframe_distance: 1.0
+keyframe_angle_deg: 10.0
+keyframe_voxel_size: 0.25
+min_keyframe_points: 250
+max_keyframe_points: 18000
+max_keyframes: 3000
+
+loop_detection_rate: 0.5
+# IMPORTANT: adjacent frames are not loops. Do not reduce both guards merely
+# to make loop edges appear sooner.
+min_loop_time: 20.0
+min_loop_keyframe_gap: 25
+# Once a revisit is accepted, nearby keyframes observe the same place. Keep
+# only one constraint per revisit region to avoid redundant correlated loops.
+loop_cooldown_keyframes: 10
+loop_search_radius: 8.0
+# UAV-specific safety gate: never match a takeoff/landing scan against a
+# cruising-altitude revisit merely because the horizontal structure is alike.
+max_loop_vertical_separation: 1.0
+max_spatial_candidates: 15
+scan_context_rings: 20
+scan_context_sectors: 60
+scan_context_max_radius: 30.0
+scan_context_lidar_height: 2.0
+# UAV altitude is not constant. Estimate a robust local height reference
+# instead of assuming that every scan was acquired exactly 2 m above ground.
+scan_context_normalize_height: true
+scan_context_ground_percentile: 0.10
+scan_context_max_height: 15.0
+# Aggregate consecutive non-repeating MID360 sweeps before descriptor creation.
+descriptor_submap_keyframes: 4
+descriptor_voxel_size: 0.35
+descriptor_max_points: 40000
+# Lower is stricter. The first threshold is a confident descriptor match.
+scan_context_threshold: 0.22
+# A nearby odometry candidate may enter strict geometric verification even
+# when its sparse Scan Context is in this gray zone. ICP/overlap/correction
+# gates still have to pass; this value alone never accepts a loop.
+scan_context_geometric_threshold: 0.55
+geometric_fallback_radius: 2.0
+max_icp_candidates: 5
+use_scan_context_yaw_seeds: true
+
+submap_neighbors: 5
+icp_voxel_size: 0.30
+icp_max_correspondence_distance: 1.20
+icp_max_iterations: 60
+icp_fitness_threshold: 0.30
+# Prevent a tiny matching patch from reporting a deceptively low ICP score.
+icp_min_overlap: 0.35
+# Hard gates against catastrophic graph deformation after a false candidate.
+max_loop_translation_correction: 4.0
+max_loop_rotation_correction_deg: 35.0
+
+optimizer_iterations: 8
+optimizer_huber_delta: 2.5
+odom_translation_weight: 30.0
+odom_rotation_weight: 40.0
+loop_translation_weight: 12.0
+loop_rotation_weight: 18.0
+map_publish_rate: 0.2
+map_voxel_size: 0.20
+publish_corrected_scan: true

@@ -43,10 +43,12 @@ public:
     {
         std::size_t operator()(const Key& key) const
         {
-            const std::size_t x = std::hash<int>()(key.x);
-            const std::size_t y = std::hash<int>()(key.y);
-            const std::size_t z = std::hash<int>()(key.z);
-            return x ^ (y << 1U) ^ (z << 2U);
+            // Coordinates are correlated; x^(y<<1)^(z<<2) collapsed large
+            // planar grids into very few buckets and made ray clearing costly.
+            std::size_t seed = 0;
+            for (int value : {key.x,key.y,key.z})
+                seed ^= std::hash<int>()(value) + 0x9e3779b9U + (seed<<6U) + (seed>>2U);
+            return seed;
         }
     };
 
@@ -58,6 +60,8 @@ public:
         // Consecutive current scans whose rays traversed this voxel without a
         // return. This is the negative evidence needed to remove old people.
         std::uint16_t free_misses{0};
+        ros::Time last_miss;
+        ros::Time last_seen;
     };
 
     struct TrailSample
@@ -98,6 +102,10 @@ public:
         pnh_.param("backward_trail_seconds", backward_trail_seconds_, 1.5);
         pnh_.param("trail_step", trail_step_, 0.15);
         pnh_.param("dynamic_history_seconds", dynamic_history_seconds_, 20.0);
+        // Ablation switch: keep detection and the safety controller identical
+        // while removing only the navigation map's dynamic-object cleanup.
+        pnh_.param("enable_dynamic_map_clearing",
+                   enable_dynamic_map_clearing_, true);
         pnh_.param("minimum_static_hits", minimum_static_hits_, 2);
         pnh_.param("stable_minimum_static_hits",
                    stable_minimum_static_hits_, 8);
@@ -118,6 +126,24 @@ public:
         pnh_.param("object_timeout", object_timeout_, 0.40);
         pnh_.param("publish_rate", publish_rate_, 2.0);
         pnh_.param("max_voxels", max_voxels_, 500000);
+        // Opt-in for the exploration demo: a track is a hypothesis, NOT
+        // permission to erase a cylinder through a permanently observed rack.
+        pnh_.param("evidence_only_clearing", evidence_only_clearing_, false);
+        pnh_.param("stable_free_miss_threshold", stable_free_misses_, 6);
+        pnh_.param("free_evidence_max_gap", evidence_max_gap_, 1.0);
+        pnh_.param("free_evidence_min_age", evidence_min_age_, 0.5);
+        pnh_.param("free_ray_point_tolerance", ray_point_tolerance_, 0.06);
+        pnh_.param("clearing_odom_max_dt", clearing_odom_max_dt_, 0.08);
+        // FAST-LIO registered returns and odometry share the end-of-scan IMU
+        // frame. Rotate the SAME configured LiDAR-to-IMU translation into map.
+        std::vector<double> extrinsic;
+        if (nh_.getParam("/mapping/extrinsic_T", extrinsic) && extrinsic.size() == 3)
+            lidar_offset_ = Eigen::Vector3d(extrinsic[0], extrinsic[1], extrinsic[2]);
+        stable_free_misses_ = std::max(1, std::min(65535, stable_free_misses_));
+        evidence_max_gap_ = std::max(0.05, evidence_max_gap_);
+        evidence_min_age_ = std::max(0.0, evidence_min_age_);
+        ray_point_tolerance_ = std::max(0.01, std::min(0.1, ray_point_tolerance_));
+        clearing_odom_max_dt_ = std::max(0.001, clearing_odom_max_dt_);
 
         voxel_size_ = std::max(0.03, voxel_size_);
         dynamic_mask_radius_ = std::max(voxel_size_, dynamic_mask_radius_);
@@ -311,6 +337,7 @@ private:
 
     void clearDynamicVoxels(const ros::Time& now)
     {
+        if (evidence_only_clearing_) return;
         const auto erase_cylinder = [&](const Eigen::Vector3d& center)
         {
             const Key key = keyFor(center);
@@ -362,6 +389,7 @@ private:
 
     void objectsCallback(const fastlio_bridge::DynamicObjectArray::ConstPtr& msg)
     {
+        if (!enable_dynamic_map_clearing_) return;
         latest_objects_ = *msg;
         objects_receive_time_ = ros::Time::now();
         have_objects_ = true;
@@ -405,10 +433,107 @@ private:
 
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     {
+        if (normalizeFrame(msg->header.frame_id) != normalizeFrame(world_frame_)) return;
+        odom_history_.push_back(msg);
+        while (odom_history_.size() > 100) odom_history_.pop_front();
         uav_position_ = Eigen::Vector3d(msg->pose.pose.position.x,
                                         msg->pose.pose.position.y,
                                         msg->pose.pose.position.z);
         have_odom_ = true;
+        if (pending_cloud_ && std::abs((pending_cloud_->header.stamp-msg->header.stamp).toSec()) <= clearing_odom_max_dt_)
+        {
+            const auto pending = pending_cloud_;
+            pending_cloud_.reset();
+            cloudCallback(pending);
+        }
+    }
+
+    void updateEvidenceFreeSpace(const CloudT& cloud,
+        const std::unordered_map<Key, FrameCell, KeyHash>& endpoints,
+        const ros::Time& stamp)
+    {
+        latest_free_cells_.clear();
+        if (!enable_free_space_clearing_ || stamp.isZero()) return;
+        nav_msgs::Odometry::ConstPtr nearest;
+        double best_dt = std::numeric_limits<double>::infinity();
+        for (const auto& odom : odom_history_)
+        {
+            const double dt = std::abs((odom->header.stamp - stamp).toSec());
+            if (dt < best_dt) { best_dt = dt; nearest = odom; }
+        }
+        if (!nearest || best_dt > clearing_odom_max_dt_)
+        {
+            ROS_WARN_THROTTLE(5.0, "[StaticMapBuilder] skip clearing: no time-matched odom (dt=%.3f)", best_dt);
+            return; // Never manufacture free evidence from stale/mismatched pose.
+        }
+        const auto& pose = nearest->pose.pose;
+        Eigen::Quaterniond q(pose.orientation.w, pose.orientation.x,
+                             pose.orientation.y, pose.orientation.z);
+        if (!q.coeffs().allFinite() || q.norm() < 1e-6) return;
+        const Eigen::Vector3d origin = Eigen::Vector3d(pose.position.x, pose.position.y,
+            pose.position.z) + q.normalized() * lidar_offset_;
+        if (!origin.allFinite()) return;
+
+        // Voxel-neighbour protection handles surfaces straddling voxel borders.
+        // All real returns count, including ones inside a dynamic track mask.
+        std::unordered_set<Key, KeyHash> protected_cells, checked_cells;
+        std::unordered_set<Key, KeyHash> evidence;
+        const std::size_t stride = std::max<std::size_t>(1,
+            (cloud.size()+max_free_rays_-1)/max_free_rays_);
+        const double step = voxel_size_ * 0.5;
+        for (std::size_t i=0; i<cloud.size(); i+=stride)
+        {
+            const auto& p = cloud[i];
+            const Eigen::Vector3d ray = Eigen::Vector3d(p.x,p.y,p.z)-origin;
+            const double range = ray.norm();
+            if (!ray.allFinite() || range < 1e-6) continue;
+            const Eigen::Vector3d direction = ray/range;
+            const double length = std::min(free_space_max_range_,range-free_space_endpoint_margin_);
+            for (double d=step; d<=length; d+=step)
+            {
+                const Key key = keyFor(origin+direction*d);
+                if (endpoints.count(key)) continue;
+                latest_free_cells_.insert(key);
+                auto it = cells_.find(key);
+                if (it != cells_.end() && !evidence.count(key) && !protected_cells.count(key))
+                {
+                    const Eigen::Vector3d relative = it->second.mean-origin;
+                    const double along = relative.dot(direction);
+                    // A ray passing elsewhere in the same voxel is NOT a
+                    // contradiction of this point (thin shelves, leaves, edges).
+                    if (along>0 && along<length &&
+                        (relative-direction*along).norm() <= ray_point_tolerance_)
+                    {
+                        if (checked_cells.insert(key).second)
+                            for (int dz=-1; dz<=1; ++dz)
+                                for (int dy=-1; dy<=1; ++dy)
+                                    for (int dx=-1; dx<=1; ++dx)
+                                        if (endpoints.count({key.x+dx,key.y+dy,key.z+dz}))
+                                            protected_cells.insert(key);
+                        if (!protected_cells.count(key)) evidence.insert(key);
+                    }
+                }
+                if (latest_free_cells_.size() >= static_cast<std::size_t>(max_free_voxels_)) break;
+            }
+            if (latest_free_cells_.size() >= static_cast<std::size_t>(max_free_voxels_)) break;
+        }
+        std::size_t erased=0;
+        for (const auto& key : evidence)
+        {
+            auto it = cells_.find(key);
+            if (it == cells_.end()) continue;
+            Cell& cell = it->second;
+            if ((stamp-cell.last_seen).toSec() < evidence_min_age_) continue;
+            const double gap = (stamp-cell.last_miss).toSec();
+            if (gap<=0 || gap>evidence_max_gap_) cell.free_misses=0;
+            cell.last_miss=stamp;
+            const int threshold = cell.hits>=static_cast<unsigned>(stable_minimum_static_hits_)
+                ? stable_free_misses_ : free_space_miss_threshold_;
+            cell.free_misses=static_cast<std::uint16_t>(std::min(threshold,int(cell.free_misses)+1));
+            if (cell.free_misses>=threshold) { cells_.erase(it); ++erased; }
+        }
+        ROS_INFO_THROTTLE(2.0,"[StaticMapBuilder] evidence-only erased=%zu ray_candidates=%zu odom_dt=%.4f (no track-cylinder deletion)",
+                          erased,evidence.size(),best_dt);
     }
 
     void cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
@@ -421,12 +546,33 @@ private:
             return;
         }
 
+        if (evidence_only_clearing_)
+        {
+            bool matched = false;
+            for (const auto& odom : odom_history_)
+                if (std::abs((odom->header.stamp-msg->header.stamp).toSec()) <= clearing_odom_max_dt_)
+                    { matched=true; break; }
+            if (!matched)
+            {
+                // Cloud and odom travel through different ROS connections.
+                // A bounded latest-only pending scan tolerates callback order
+                // without using the previous scan's pose or an unbounded queue.
+                pending_cloud_=msg;
+                ROS_WARN_THROTTLE(5.0,"[StaticMapBuilder] waiting for scan-matched odometry");
+                return;
+            }
+            pending_cloud_.reset();
+        }
+
         CloudT cloud;
         pcl::fromROSMsg(*msg, cloud);
         const ros::Time now = ros::Time::now();
         ++frame_index_;
-        pruneDynamicTrails(now);
-        clearDynamicVoxels(now);
+        if (enable_dynamic_map_clearing_)
+        {
+            pruneDynamicTrails(now);
+            clearDynamicVoxels(now);
+        }
 
         std::size_t accepted = 0;
         std::unordered_map<Key, FrameCell, KeyHash> frame_cells;
@@ -434,7 +580,9 @@ private:
         for (const auto& p : cloud.points)
         {
             const Eigen::Vector3d point(p.x, p.y, p.z);
-            if (!point.allFinite() || maskedByDynamicObject(point, now)) continue;
+            if (!point.allFinite() ||
+                (!evidence_only_clearing_ && enable_dynamic_map_clearing_ && maskedByDynamicObject(point, now)))
+                continue;
             FrameCell& frame_cell = frame_cells[keyFor(point)];
             frame_cell.sum += point;
             ++frame_cell.count;
@@ -450,6 +598,7 @@ private:
             Cell& cell = cells_[item.first];
             ++cell.hits;
             cell.last_frame = frame_index_;
+            cell.last_seen = msg->header.stamp;
             cell.free_misses = 0;
             const double alpha = 1.0 / static_cast<double>(
                 std::min<std::uint32_t>(cell.hits, 20));
@@ -458,7 +607,10 @@ private:
 
         // Use current local rays as negative occupancy observations. A stale
         // body/vehicle point is removed after several scans see through it.
-        updateFreeSpace(frame_cells);
+        if (evidence_only_clearing_)
+            updateEvidenceFreeSpace(cloud, frame_cells, msg->header.stamp);
+        else
+            updateFreeSpace(frame_cells);
 
         enforceMemoryLimit();
         last_header_ = msg->header;
@@ -530,7 +682,9 @@ private:
         sensor_msgs::PointCloud2 output;
         pcl::toROSMsg(map, output);
         output.header = last_header_;
-        output.header.stamp = ros::Time::now();
+        // A timer republishing an old map must not pretend a new scan was
+        // integrated. The explorer checks this acquisition time as well.
+        output.header.stamp = evidence_only_clearing_ ? last_header_.stamp : ros::Time::now();
         output.header.frame_id = world_frame_;
         map_pub_.publish(output);
         if (publish_legacy_map_) legacy_map_pub_.publish(output);
@@ -556,6 +710,7 @@ private:
         cells_.clear();
         dynamic_trails_.clear();
         latest_free_cells_.clear();
+        pending_cloud_.reset();
         frame_index_ = 0;
         ROS_WARN("[StaticMapBuilder] map cleared by service request.");
         return true;
@@ -597,6 +752,14 @@ private:
     bool have_odom_{false};
     bool publish_legacy_map_{false};
     bool enable_free_space_clearing_{true};
+    bool enable_dynamic_map_clearing_{true};
+    bool evidence_only_clearing_{false};
+    int stable_free_misses_{6};
+    double evidence_max_gap_{1.0}, evidence_min_age_{0.5};
+    double ray_point_tolerance_{0.06}, clearing_odom_max_dt_{0.08};
+    Eigen::Vector3d lidar_offset_{Eigen::Vector3d::Zero()};
+    std::deque<nav_msgs::Odometry::ConstPtr> odom_history_;
+    sensor_msgs::PointCloud2::ConstPtr pending_cloud_;
 };
 
 int main(int argc, char** argv)

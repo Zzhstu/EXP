@@ -1,0 +1,64 @@
+{
+  "source_bag": "/home/a/AstraDroneOpen/dynamic_demo_runs/badcase_20260923_194722.bag",
+  "source_topics": [
+    "/livox/lidar",
+    "/uav1/fastlio/odom",
+    "/gazebo/model_states"
+  ],
+  "event_relative_time_s": 29.39099999999999,
+  "nearest_gt_center_xy_distance_m": 0.9835057645553144,
+  "projection": {
+    "height": 64,
+    "width": 360,
+    "elevation_degrees": [
+      -45.0,
+      45.0
+    ],
+    "max_range_m": 30.0
+  },
+  "extrinsic_yaml": "/home/a/AstraDroneOpen/AstraDrone_ros1_ws/src/SLAM/FAST_LIO/config/mid360.yaml",
+  "residual_definition": "abs(current_range - warped_previous_range) / current_range",
+  "warning": "Not LMNet inference or dynamic-point ground truth; MID360 sampling and occlusion cause residuals.",
+  "frames": [
+    {
+      "bag_time_s": 176.371,
+      "relative_time_s": 28.68100000000001,
+      "point_count": 20000,
+      "valid_range_pixels": 3738,
+      "common_pixels_with_previous": 0,
+      "common_fraction_of_current": null,
+      "residual_median": null,
+      "residual_p95": null
+    },
+    {
+      "bag_time_s": 176.852,
+      "relative_time_s": 29.162000000000006,
+      "point_count": 20000,
+      "valid_range_pixels": 3567,
+      "common_pixels_with_previous": 2809,
+      "common_fraction_of_current": 0.7874964956546118,
+      "residual_median": 0.02947409264743328,
+      "residual_p95": 5.8116792678833
+    },
+    {
+      "bag_time_s": 177.372,
+      "relative_time_s": 29.682000000000016,
+      "point_count": 20000,
+      "valid_range_pixels": 3722,
+      "common_pixels_with_previous": 2761,
+      "common_fraction_of_current": 0.7418054809242343,
+      "residual_median": 0.03210059180855751,
+      "residual_p95": 5.4975266456604
+    },
+    {
+      "bag_time_s": 177.847,
+      "relative_time_s": 30.15700000000001,
+      "point_count": 20000,
+      "valid_range_pixels": 3577,
+      "common_pixels_with_previous": 2834,
+      "common_fraction_of_current": 0.7922840369024322,
+      "residual_median": 0.02914990484714508,
+      "residual_p95": 0.9124110549688339
+    }
+  ]
+}

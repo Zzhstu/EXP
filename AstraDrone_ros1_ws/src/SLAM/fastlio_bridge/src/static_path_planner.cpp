@@ -7,6 +7,7 @@
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <Eigen/Dense>
@@ -55,10 +56,14 @@ public:
         pnh_.param("resolution", resolution_, 0.25);
         pnh_.param("inflation_radius", inflation_radius_, 0.95);
         pnh_.param("planning_margin", planning_margin_, 4.0);
+        pnh_.param("max_planning_margin", max_planning_margin_, planning_margin_);
+        pnh_.param("route_switch_improvement", route_switch_improvement_, 0.0);
         pnh_.param("local_planning_margin", local_planning_margin_, 2.5);
         pnh_.param("local_planning_horizon", local_planning_horizon_, 4.0);
         pnh_.param("local_replan_to_final_goal",
                    local_replan_to_final_goal_, true);
+        // Baseline ablation: use only the persistent global A* result.
+        pnh_.param("enable_local_replanning", enable_local_replanning_, true);
         pnh_.param("local_free_clear_radius",
                    local_free_clear_radius_, 0.15);
         pnh_.param("obstacle_min_relative_z", obstacle_min_relative_z_, -0.80);
@@ -74,6 +79,8 @@ public:
         resolution_ = std::max(0.10, resolution_);
         inflation_radius_ = std::max(0.0, inflation_radius_);
         planning_margin_ = std::max(1.0, planning_margin_);
+        max_planning_margin_ = std::max(planning_margin_, max_planning_margin_);
+        route_switch_improvement_ = std::max(0.0, std::min(0.9, route_switch_improvement_));
         local_planning_margin_ = std::max(1.0, local_planning_margin_);
         lookahead_distance_ = std::max(resolution_, lookahead_distance_);
         local_planning_horizon_ = std::max(lookahead_distance_,
@@ -209,12 +216,34 @@ private:
                       msg->header.frame_id.c_str(), world_frame_.c_str());
             return;
         }
+        if (!std::isfinite(msg->pose.position.x) || !std::isfinite(msg->pose.position.y) ||
+            !std::isfinite(msg->pose.position.z))
+        {
+            ROS_ERROR("[StaticPathPlanner] rejected non-finite goal.");
+            return;
+        }
+        // RViz 2D goals mean change XY, NOT adopt the instantaneous altitude.
+        // Re-sampling odometry on every click ratchets a small tracking error
+        // into the next target, eventually projecting the roof as a 2D wall.
+        const double held_z = have_goal_ && final_goal_.pose.position.z > 0.1
+            ? final_goal_.pose.position.z
+            : (have_odom_ ? odom_.pose.pose.position.z : 0.0);
+        const double requested_z = msg->pose.position.z <= 0.1 ? held_z : msg->pose.position.z;
+        const bool changed_goal = !have_goal_ ||
+            std::hypot(msg->pose.position.x - final_goal_.pose.position.x,
+                       msg->pose.position.y - final_goal_.pose.position.y) > 0.01 ||
+            std::abs(requested_z - final_goal_.pose.position.z) > 0.01;
+        if (changed_goal)
+        {
+            active_search_margin_ = planning_margin_;
+            previous_local_route_.clear();
+        }
         final_goal_ = *msg;
         final_goal_.header.frame_id = world_frame_;
-        if (final_goal_.pose.position.z <= 0.1 && have_odom_)
-            final_goal_.pose.position.z = odom_.pose.pose.position.z;
+        if (final_goal_.pose.position.z <= 0.1)
+            final_goal_.pose.position.z = held_z;
         have_goal_ = true;
-        ROS_INFO("[StaticPathPlanner] final goal=(%.2f %.2f %.2f)",
+        if (changed_goal) ROS_INFO("[StaticPathPlanner] final goal=(%.2f %.2f %.2f)",
                  final_goal_.pose.position.x, final_goal_.pose.position.y,
                  final_goal_.pose.position.z);
     }
@@ -233,11 +262,14 @@ private:
         const double max_x = std::max(start.x(), goal.x()) + margin;
         const double max_y = std::max(start.y(), goal.y()) + margin;
 
-        grid.origin_x = min_x;
-        grid.origin_y = min_y;
+        // Anchor cells to the map lattice, not the continuously moving UAV.
+        // Otherwise a sub-cell motion shifts every obstacle boundary and can
+        // invalidate a previously safe detour without any scene change.
+        grid.origin_x = std::floor(min_x / resolution_) * resolution_;
+        grid.origin_y = std::floor(min_y / resolution_) * resolution_;
         grid.resolution = resolution_;
-        grid.width = static_cast<int>(std::ceil((max_x - min_x) / resolution_)) + 1;
-        grid.height = static_cast<int>(std::ceil((max_y - min_y) / resolution_)) + 1;
+        grid.width = static_cast<int>(std::ceil((max_x - grid.origin_x) / resolution_)) + 1;
+        grid.height = static_cast<int>(std::ceil((max_y - grid.origin_y) / resolution_)) + 1;
 
         const std::int64_t cell_count =
             static_cast<std::int64_t>(grid.width) * grid.height;
@@ -250,17 +282,29 @@ private:
         }
         grid.occupied.assign(static_cast<std::size_t>(cell_count), 0U);
 
-        // Rasterization order is important:
-        // global occupied -> locally observed free -> current local occupied.
-        // Thus a current return always wins, while a ray that sees through an
-        // old person can immediately remove that stale global obstacle.
+        // Free evidence invalidates a matching RAW 3-D map point, not a whole
+        // inflated 2-D disk. Erasing inflation around every free ray removed
+        // nearby/other-height shelves and produced transient false shortcuts
+        // just outside the rolling occupied map's 6m radius.
+        CloudT::Ptr free_cloud(new CloudT);
+        if (clearing_map != nullptr)
+            for (const auto& p : clearing_map->points)
+                if (std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z))
+                    free_cloud->push_back(p);
+        pcl::KdTreeFLANN<PointT> free_tree;
+        if (!free_cloud->empty()) free_tree.setInputCloud(free_cloud);
+        std::vector<int> free_indices(1);
+        std::vector<float> free_distances(1);
         const auto rasterize = [&](const CloudT& cloud,
                                    const double radius,
-                                   const std::uint8_t value)
+                                   const std::uint8_t value,
+                                   const bool remove_observed_free = false)
         {
+            // Occupied cells cover an area, not just their centre. Include the
+            // half diagonal so discretization cannot silently reduce clearance.
+            const double effective_radius = radius + (value ? std::sqrt(0.5)*resolution_ : 0.0);
             const int radius_cells = static_cast<int>(
-                std::ceil(radius / resolution_));
-            const double radius_sq = radius * radius;
+                std::ceil(effective_radius / resolution_) + 1);
             for (const auto& point : cloud.points)
             {
                 if (!std::isfinite(point.x) || !std::isfinite(point.y) ||
@@ -268,6 +312,10 @@ private:
                 const double relative_z = point.z - flight_z;
                 if (relative_z < obstacle_min_relative_z_ ||
                     relative_z > obstacle_max_relative_z_) continue;
+                if (remove_observed_free && !free_cloud->empty() &&
+                    free_tree.nearestKSearch(point, 1, free_indices, free_distances) > 0 &&
+                    free_distances[0] <= local_free_clear_radius_ * local_free_clear_radius_)
+                    continue;
                 int x = 0;
                 int y = 0;
                 if (!grid.worldToCell(point.x, point.y, x, y)) continue;
@@ -275,23 +323,15 @@ private:
                 {
                     for (int dx = -radius_cells; dx <= radius_cells; ++dx)
                     {
-                        if ((dx * resolution_) * (dx * resolution_) +
-                            (dy * resolution_) * (dy * resolution_) > radius_sq)
-                            continue;
-                        if (grid.inside(x + dx, y + dy))
+                        if (!grid.inside(x + dx, y + dy)) continue;
+                        const Eigen::Vector2d centre = grid.cellCenter(x + dx, y + dy);
+                        if ((centre - Eigen::Vector2d(point.x, point.y)).norm() <= effective_radius)
                             grid.occupied[grid.index(x + dx, y + dy)] = value;
                     }
                 }
             }
         };
-        rasterize(primary_map, inflation_radius_, 1U);
-        if (clearing_map != nullptr)
-        {
-            // Clear both the stale obstacle cell and the inflation halo it had
-            // created. Real surfaces visible now are restored by local_map.
-            rasterize(*clearing_map,
-                      inflation_radius_ + local_free_clear_radius_, 0U);
-        }
+        rasterize(primary_map, inflation_radius_, 1U, true);
         if (overlay_map != nullptr)
             rasterize(*overlay_map, inflation_radius_, 1U);
 
@@ -417,6 +457,43 @@ private:
         return true;
     }
 
+    // A short start-goal bounding box can cut off the end of a long shelf.
+    // Retry a larger SEARCH area, never reduce obstacle inflation or carve a
+    // passage. max_grid_cells still bounds memory; default max==initial keeps
+    // existing scenes unchanged. Both global and locally corrected A* use it.
+    bool planWithExpansion(const Eigen::Vector2d& start,
+                           const Eigen::Vector2d& goal,
+                           double flight_z, const CloudT& primary_map,
+                           const CloudT* overlay, const CloudT* clearing,
+                           double margin, Grid& grid,
+                           std::vector<Eigen::Vector2d>& path)
+    {
+        // Keep expanded bounds for this goal. Shrinking again next cycle can
+        // repeatedly cut off one shelf end and reverse the selected detour.
+        // A genuinely new goal resets the margin; repeated identical goals do not.
+        if (max_planning_margin_ > planning_margin_)
+            margin = std::max(margin, active_search_margin_);
+        const double initial_margin = margin;
+        while (true)
+        {
+            path.clear();
+            if (!buildGrid(start, goal, flight_z, primary_map, overlay,
+                           clearing, margin, grid)) return false;
+            if (max_planning_margin_ > planning_margin_)
+                active_search_margin_ = margin;
+            if (runAStar(grid, start, goal, path))
+            {
+                if (margin > initial_margin)
+                    ROS_INFO_THROTTLE(2.0,
+                        "[StaticPathPlanner] expanded search margin %.1f -> %.1fm; "
+                        "found detour without reducing clearance.", initial_margin, margin);
+                return true;
+            }
+            if (margin >= max_planning_margin_) return false;
+            margin = std::min(max_planning_margin_, margin * 2.0);
+        }
+    }
+
     bool lineIsFree(const Grid& grid,
                     const Eigen::Vector2d& from,
                     const Eigen::Vector2d& to) const
@@ -496,6 +573,63 @@ private:
         publisher.publish(message);
     }
 
+    Eigen::Vector2d visibleWaypoint(const Grid& grid,
+                                    const std::vector<Eigen::Vector2d>& path) const
+    {
+        if (path.size() < 2) return path.front();
+        const Eigen::Vector2d candidate = pointAtDistance(path, lookahead_distance_);
+        // A lookahead measured along a polyline can lie beyond its first bend.
+        // The controller flies a straight chord, so verify that chord too.
+        if (lineIsFree(grid, path.front(), candidate)) return candidate;
+        return path[1];
+    }
+
+    std::vector<Eigen::Vector2d> stableLocalRoute(
+        const Grid& grid, const Eigen::Vector2d& start,
+        const std::vector<Eigen::Vector2d>& proposed)
+    {
+        if (route_switch_improvement_ > 0.0 && previous_local_route_.size() > 1)
+        {
+            // Trim the already travelled prefix at the closest segment.
+            std::size_t next = 1;
+            double best = std::numeric_limits<double>::infinity();
+            Eigen::Vector2d projection = start;
+            for (std::size_t i = 1; i < previous_local_route_.size(); ++i)
+            {
+                const auto a = previous_local_route_[i-1];
+                const Eigen::Vector2d d = previous_local_route_[i] - a;
+                const double t = d.squaredNorm() > 1e-9
+                    ? std::max(0.0, std::min(1.0, (start-a).dot(d)/d.squaredNorm())) : 0.0;
+                const double distance = (start-a-t*d).squaredNorm();
+                if (distance < best) { best = distance; next = i; projection = a+t*d; }
+            }
+            std::vector<Eigen::Vector2d> retained{start};
+            // Rejoin the old segment before following it. Jumping straight to
+            // its far corner can cut inside an inflated obstacle after drift.
+            if ((projection-start).norm() > 1e-4) retained.push_back(projection);
+            retained.insert(retained.end(), previous_local_route_.begin()+next,
+                            previous_local_route_.end());
+            bool valid = (retained.back()-proposed.back()).norm() <= goal_tolerance_;
+            double old_length = 0.0, new_length = 0.0;
+            for (std::size_t i = 1; i < retained.size(); ++i)
+            {
+                // Never commit blindly: current occupied cells invalidate the
+                // old route immediately, including dynamic/local observations.
+                valid = valid && lineIsFree(grid, retained[i-1], retained[i]);
+                old_length += (retained[i]-retained[i-1]).norm();
+            }
+            for (std::size_t i = 1; i < proposed.size(); ++i)
+                new_length += (proposed[i]-proposed[i-1]).norm();
+            if (valid && new_length >= old_length * (1.0-route_switch_improvement_))
+            {
+                previous_local_route_ = simplifyPath(grid, retained);
+                return previous_local_route_;
+            }
+        }
+        previous_local_route_ = proposed;
+        return proposed;
+    }
+
     void publishWaypoint(const Eigen::Vector2d& point, const ros::Time& stamp)
     {
         geometry_msgs::PoseStamped waypoint = final_goal_;
@@ -551,57 +685,75 @@ private:
         // insensitive to short-lived objects because dynamic trajectories are
         // removed from the stable map by StaticMapBuilder.
         Grid global_grid;
-        if (!buildGrid(start, goal, final_goal_.pose.position.z, global_map_,
-                       nullptr, nullptr, planning_margin_, global_grid))
-        {
-            publishHold(now);
-            return;
-        }
         std::vector<Eigen::Vector2d> global_path;
-        if (!runAStar(global_grid, start, goal, global_path))
+        const bool global_ok = planWithExpansion(start, goal,
+            final_goal_.pose.position.z, global_map_, nullptr, nullptr,
+            planning_margin_, global_grid, global_path);
+        if (!global_ok && !enable_local_replanning_)
         {
             ROS_WARN_THROTTLE(1.0,
                 "[StaticPathPlanner] no global path; holding and replanning.");
             publishHold(now);
             return;
         }
-        const std::vector<Eigen::Vector2d> global_simplified =
-            simplifyPath(global_grid, global_path);
-        publishPath(global_simplified, now, path_pub_);
+        const std::vector<Eigen::Vector2d> global_simplified = global_ok
+            ? simplifyPath(global_grid, global_path)
+            : std::vector<Eigen::Vector2d>{};
+        if (global_ok) publishPath(global_simplified, now, path_pub_);
+        else publishPath({start}, now, path_pub_);
+
+        if (!enable_local_replanning_)
+        {
+            const Eigen::Vector2d waypoint = visibleWaypoint(global_grid, global_simplified);
+            publishPath(global_simplified, now, local_path_pub_);
+            publishWaypoint(waypoint, now);
+            return;
+        }
+
+        // A ghost can make global A* fail completely. The local free-space
+        // evidence must still be allowed to reopen a currently visible route.
+        if (!global_ok && !have_local_free_space_)
+        {
+            ROS_WARN_THROTTLE(1.0,
+                "[StaticPathPlanner] global route blocked and no local free evidence.");
+            publishHold(now);
+            return;
+        }
 
         // Stage 2: by default recompute the complete route after applying local
         // occupied and free-space evidence. This can immediately shortcut a
         // stale global detour; horizon mode remains available as a parameter.
-        const Eigen::Vector2d local_goal = local_replan_to_final_goal_
+        const Eigen::Vector2d local_goal = (local_replan_to_final_goal_ || !global_ok)
             ? goal
             : pointAtDistance(global_simplified, local_planning_horizon_);
         Grid local_grid;
         const CloudT* local_overlay = have_local_map_ ? &local_map_ : nullptr;
         const CloudT* local_clearing = have_local_free_space_
             ? &local_free_space_ : nullptr;
-        const double local_margin = local_replan_to_final_goal_
+        const double local_margin = (local_replan_to_final_goal_ || !global_ok)
             ? planning_margin_ : local_planning_margin_;
-        if (!buildGrid(start, local_goal, final_goal_.pose.position.z,
-                       global_map_, local_overlay, local_clearing, local_margin,
-                       local_grid))
-        {
-            publishHold(now);
-            return;
-        }
         std::vector<Eigen::Vector2d> local_path;
-        if (!runAStar(local_grid, start, local_goal, local_path))
+        if (!planWithExpansion(start, local_goal, final_goal_.pose.position.z,
+                               global_map_, local_overlay, local_clearing,
+                               local_margin, local_grid, local_path))
         {
             ROS_WARN_THROTTLE(1.0,
-                "[StaticPathPlanner] local route blocked; holding while the "
-                "rolling map expires and replanning.");
+                "[StaticPathPlanner] local route blocked; holding/replanning. "
+                "start=(%.2f %.2f) goal=(%.2f %.2f) map_z=%.2f band=[%.2f %.2f]. "
+                "Real shelves/roof will NOT disappear when the local map expires.",
+                start.x(), start.y(), goal.x(), goal.y(), final_goal_.pose.position.z,
+                final_goal_.pose.position.z + obstacle_min_relative_z_,
+                final_goal_.pose.position.z + obstacle_max_relative_z_);
             publishHold(now);
             return;
         }
 
         const std::vector<Eigen::Vector2d> local_simplified =
-            simplifyPath(local_grid, local_path);
-        const Eigen::Vector2d waypoint = pointAtDistance(
-            local_simplified, lookahead_distance_);
+            stableLocalRoute(local_grid, start, simplifyPath(local_grid, local_path));
+        if (!global_ok)
+            ROS_INFO_THROTTLE(1.0,
+                "[StaticPathPlanner] local free-space restored a blocked global route.");
+        const Eigen::Vector2d waypoint = visibleWaypoint(local_grid, local_simplified);
         publishPath(local_simplified, now, local_path_pub_);
         publishWaypoint(waypoint, now);
         ROS_INFO_THROTTLE(1.0,
@@ -627,12 +779,17 @@ private:
     double local_planning_margin_{2.5}, local_planning_horizon_{4.0};
     double local_free_clear_radius_{0.15};
     double obstacle_min_relative_z_{-0.80}, obstacle_max_relative_z_{0.80};
+    double max_planning_margin_{4.0};
+    double active_search_margin_{4.0};
+    double route_switch_improvement_{0.0};
+    std::vector<Eigen::Vector2d> previous_local_route_;
     double lookahead_distance_{1.0}, goal_tolerance_{0.30};
     double start_clearance_radius_{0.35}, goal_search_radius_{1.5};
     double replan_rate_{2.0};
     int minimum_map_points_{30}, max_grid_cells_{250000};
     bool have_global_map_{false}, have_local_map_{false};
     bool have_local_free_space_{false}, local_replan_to_final_goal_{true};
+    bool enable_local_replanning_{true};
     bool have_odom_{false}, have_goal_{false};
 };
 

@@ -2,10 +2,19 @@
   <arg name="enable_control" default="true"/>
   <arg name="auto_arm" default="true"/>
   <arg name="auto_goal" default="true"/>
+  <arg name="relative_goal_x" default="0.0"/>
+  <arg name="relative_goal_y" default="12.0"/>
+  <arg name="takeoff_height" default="1.5"/>
   <arg name="enable_semantic" default="false"/>
+  <arg name="enable_loop_closure" default="false"/>
+  <arg name="enable_dynamic_map_clearing" default="true"/>
+  <arg name="enable_free_space_clearing" default="true"/>
+  <arg name="enable_local_replanning" default="true"/>
+  <arg name="rviz_config" default="$(find fastlio_bridge)/rviz/astra_dynamic_avoidance.rviz"/>
   <arg name="registered_cloud_topic" default="/cloud_registered"/>
   <arg name="rviz" default="true"/>
   <arg name="enable_path_planner" default="true"/>
+  <arg name="warehouse_narrow" default="false"/>
 
   <!-- Align camera_init with MAVROS local ENU once.  Do not feed the aligned
        pose back into PX4 here, otherwise an estimator feedback loop is formed. -->
@@ -13,6 +22,9 @@
     <arg name="use_px4_initial_alignment" value="true"/>
     <arg name="publish_mavros_vision_pose" value="false"/>
     <arg name="enable_semantic" value="$(arg enable_semantic)"/>
+    <arg name="enable_loop_closure" value="$(arg enable_loop_closure)"/>
+    <arg name="enable_dynamic_map_clearing" value="$(arg enable_dynamic_map_clearing)"/>
+    <arg name="enable_free_space_clearing" value="$(arg enable_free_space_clearing)"/>
     <arg name="registered_cloud_topic" value="$(arg registered_cloud_topic)"/>
   </include>
 
@@ -28,6 +40,7 @@
   <node if="$(arg enable_path_planner)" pkg="fastlio_bridge"
         type="static_path_planner_node" name="static_path_planner" output="screen">
     <rosparam command="load" file="$(find fastlio_bridge)/config/path_planner.yaml"/>
+    <param name="enable_local_replanning" value="$(arg enable_local_replanning)"/>
   </node>
   <node pkg="fastlio_bridge" type="mavros_avoidance_controller_node"
         name="mavros_avoidance_controller" output="screen">
@@ -35,6 +48,9 @@
     <param name="enable_control" value="$(arg enable_control)"/>
     <param name="auto_arm" value="$(arg auto_arm)"/>
     <param name="auto_goal" value="$(arg auto_goal)"/>
+    <param name="relative_goal_x" value="$(arg relative_goal_x)"/>
+    <param name="relative_goal_y" value="$(arg relative_goal_y)"/>
+    <param name="takeoff_height" value="$(arg takeoff_height)"/>
     <param name="use_path_planner" value="$(arg enable_path_planner)"/>
   </node>
   <node pkg="fastlio_bridge" type="system_watchdog_node"
@@ -43,5 +59,8 @@
   <!-- One RViz instance displays the map-aligned scan, accumulated final map,
        UAV trajectory and dynamic-obstacle diagnostics together. -->
   <node if="$(arg rviz)" pkg="rviz" type="rviz" name="dynamic_demo_rviz"
-        args="-d $(find fastlio_bridge)/rviz/astra_dynamic_avoidance.rviz"/>
+        args="-d $(arg rviz_config)"/>
+  <!-- Load last: only this explicit profile overrides the three private namespaces. -->
+  <rosparam if="$(arg warehouse_narrow)" command="load"
+            file="$(find fastlio_bridge)/config/warehouse_navigation.yaml"/>
 </launch>

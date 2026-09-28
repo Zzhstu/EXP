@@ -2,6 +2,7 @@
   <!-- MID-360 Gazebo adapter. Start the Gazebo/P600 world separately. -->
   <arg name="uav_id" default="1"/>
   <arg name="enable_semantic" default="false"/>
+  <arg name="enable_loop_closure" default="false"/>
   <arg name="enable_goal_navigation" default="true"/>
 
   <include file="$(find fastlio_bridge)/launch/mid360_mapping.launch">
@@ -12,6 +13,7 @@
     <arg name="use_px4_initial_alignment" value="false"/>
     <arg name="publish_mavros_vision_pose" value="false"/>
     <arg name="enable_semantic" value="$(arg enable_semantic)"/>
+    <arg name="enable_loop_closure" value="$(arg enable_loop_closure)"/>
     <arg name="enable_goal_navigation" value="$(arg enable_goal_navigation)"/>
     <arg name="enable_control" value="false"/>
     <arg name="registered_cloud_topic" value="/uav$(arg uav_id)/mid360_world_point"/>
