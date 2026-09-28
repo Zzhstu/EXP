@@ -537,3 +537,10 @@
 实际改动：添加探索已知限制说明和阶段记录；待将现有暂存区中的生成mat_pre.txt及空的EXP-main/src/objects排除提交，保留其本地文件。用户原有其他暂存修改一并作为当前版本上传，不撤回代码改动。
 验证结果：SSH读取远端astradrone-integrated仍为4e712768a6b7501bd0743334f2c99291f45be16c，是当前HEAD祖先；源文件暂存差异空白检查通过；暂存文件最大约0.90MB，常见GitHub/AWS令牌及私钥头模式扫描未发现匹配（不是完整安全审计）。补齐现有PedSim PYTHONPATH后28项Python单测通过；本轮不重新进行全量编译或仿真，也不据单测宣称所有demo无bug。
 状态与待办：进行中，尚未提交/推送；完成后另记远端校验与提交号。
+
+[N035] 2026-09-28 08:25（Asia/Shanghai）｜当前工作快照已上传GitHub
+用户问题/需求：帮忙上传GitHub。
+解决思路/答复：沿用用户仓库Zzhstu/EXP的astradrone-integrated分支，正常快进发布当前代码；保留未完成任务的限制，不将上传当作算法修复完成。
+实际改动：源码快照提交a1f0c4895894148f6c4e87d95980680ceb012417，包含93个变更文件、10515行新增/100行删除，含仓库导航、动态地图、探索WIP、回环可选代码、测试、可视化示例、技术文档及双交流记录。生成mat_pre.txt和空objects文件仅取消暂存，本地内容未删除；bag、运行生成PCD与build/devel未加入。补充本条与学术发布记录作为收尾文档提交。
+验证结果：28项Python单测通过；提交前git diff --cached --check通过。SSH推送返回4e71276..a1f0c48成功；独立git ls-remote确认astradrone-integrated的远端完整哈希等于a1f0c4895894148f6c4e87d95980680ceb012417。没有推送origin、没有修改EXP main，没有强制推送。
+状态与待办：当前源码上传完成，地址https://github.com/Zzhstu/EXP/tree/astradrone-integrated；本收尾记录另行正常推送，不递归记录其自身提交号。自主探索长程RETURN_BLOCKED、完整三维覆盖和Gazebo卸载崩溃仍未解决；本轮没有重新全量编译或飞行测试。大体积实验产物仍在本机，不是云端数据备份。
