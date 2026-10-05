@@ -754,3 +754,10 @@
 实际改动：进行中；尚未创建提交或推送。确认origin为https://github.com/yidrone/AstraDroneOpen.git，当前分支main。本轮前已有暂存/未暂存的探索、安全恢复、FreeDOM迁移、测试、文档及组会材料改动，按用户“项目”范围准备一并发布；Git忽略的构建、bag、PCD等生成物不强制加入。
 验证结果：git ls-remote可读取origin各分支；远程main为000b725，当前本地HEAD为c639a07，需常规整合。检查新增FreeDOM约376KB、组会材料约92KB；对变更候选做常见私钥/令牌模式扫描，无命中。尚未验证推送权限。
 状态与待办：继续git add/提交、fetch并整合远程main、正常push，随后核验远程提交与GitHub地址；若认证或合并冲突阻塞，将如实报告，绝不强推。
+
+[N052-完成但发布受认证阻塞] 2026-10-05 12:49（Asia/Shanghai）｜当前项目发布至GitHub
+用户问题/需求：将当前项目上传到用户的GitHub，并告知上传地址。
+解决思路/答复：将未忽略的项目源码、配置、测试、FreeDOM迁移、交流记录与组会材料形成提交；保留本地运行日志，不强推远程历史。先fetch确认远程main为本地基线祖先，因而正常快进推送即可，无需合并或覆盖。
+实际改动：创建本地提交44fab41（feat: add warehouse exploration and FreeDOM baseline，77文件、10508插入/125删除）。为避免把生成日志误作为源码发布，AstraDrone_ros1_ws/src/SLAM/FAST_LIO/Log/mat_pre.txt仍保留在本地未提交；其余未忽略当前项目改动已纳入提交。未改远程URL、未强推、未删除任何文件。
+验证结果：origin为https://github.com/yidrone/AstraDroneOpen.git；fetch后远程main=000b725且是本地历史祖先，提交可正常快进。非第三方FreeDOM路径通过git diff --check；第三方FreeDOM原始源码保留其既有空白格式警告。git push origin main因当前环境无HTTPS GitHub认证失败，报“could not read Username for https://github.com”，故44fab41及本条记录均尚未上传；未发现可用gh登录状态或可确认的SSH认证。
+状态与待办：发布地址应为https://github.com/yidrone/AstraDroneOpen ，但远程尚不含本次提交。用户需在本机终端完成GitHub认证（建议安装/登录GitHub CLI或在git push交互中使用GitHub PAT而非账户密码），随后运行git push origin main；认证完成后可继续由后续会话核验远程提交。不得在聊天或记录中提供令牌。
