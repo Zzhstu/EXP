@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 #include <geometry_msgs/PoseStamped.h>
@@ -8,6 +9,8 @@
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
+#include <mavros_msgs/ExtendedState.h>
+#include "pose_stability.hpp"
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <std_msgs/Bool.h>
@@ -68,6 +71,13 @@ public:
         pnh_.param("avoidance_gain", avoidance_gain_, 1.0);
         pnh_.param("level1_navigation_scale", level1_navigation_scale_, 0.15);
         pnh_.param("stop_on_level1", stop_on_level1_, true);
+        // Exploration can stop safely on an emergency instead of chasing a
+        // nearest-point repulsion vector through another shelf or a wall.
+        // Default false preserves the older comparison demos' behaviour.
+        pnh_.param("hold_on_level2", hold_on_level2_, false);
+        // The fused risk topic can stay fresh even when static perception
+        // publishes SAFE because its lidar input has timed out.
+        pnh_.param("require_fresh_scan", require_fresh_scan_, false);
         pnh_.param("static_recovery_speed", static_recovery_speed_, 0.15);
         pnh_.param("recovery_surface_distance", recovery_surface_distance_, 0.65);
         pnh_.param("recovery_horizon", recovery_horizon_, 1.0);
@@ -78,6 +88,13 @@ public:
         pnh_.param("waypoint_tolerance", waypoint_tolerance_, 0.03);
         waypoint_tolerance_ = std::max(0.01, std::min(goal_tolerance_, waypoint_tolerance_));
         pnh_.param("takeoff_tolerance", takeoff_tolerance_, 0.12);
+        // Seconds / metres. Never latch the first pose during EKF startup.
+        pnh_.param("ground_stable_seconds", ground_stability_.duration, 3.0);
+        pnh_.param("ground_z_range", ground_stability_.z_range, 0.12);
+        pnh_.param("ground_xy_range", ground_stability_.xy_range, 0.25);
+        ground_stability_.duration = std::max(1.0, ground_stability_.duration);
+        pnh_.param("takeoff_settle_seconds", takeoff_settle_seconds_, 1.0);
+        takeoff_settle_seconds_=std::max(0.5,takeoff_settle_seconds_);
         pnh_.param("risk_timeout", risk_timeout_, 0.45);
         pnh_.param("odom_timeout", odom_timeout_, 0.35);
         pnh_.param("publish_rate", publish_rate_, 30.0);
@@ -92,6 +109,8 @@ public:
         }
 
         state_sub_ = nh_.subscribe(state_topic_, 10, &MavrosAvoidanceController::stateCb, this);
+        extended_sub_ = nh_.subscribe("/mavros/extended_state", 10,
+            &MavrosAvoidanceController::extendedCb, this);
         mavros_pose_sub_ = nh_.subscribe(mavros_pose_topic_, 20,
                                          &MavrosAvoidanceController::mavrosPoseCb, this);
         odom_sub_ = nh_.subscribe(odom_topic_, 20, &MavrosAvoidanceController::odomCb, this);
@@ -113,11 +132,15 @@ public:
             &MavrosAvoidanceController::dynamicRiskCb, this);
         scan_sub_ = nh_.subscribe("/uav1/fastlio/registered_scan", 1,
             &MavrosAvoidanceController::scanCb, this);
+        recovery_sub_ = nh_.subscribe("/uav1/exploration/recovery_waypoint", 1,
+            &MavrosAvoidanceController::recoveryCb, this);
         setpoint_pub_ = nh_.advertise<geometry_msgs::TwistStamped>(setpoint_topic_, 20);
         preview_pub_ = pnh_.advertise<geometry_msgs::TwistStamped>("command_preview", 20);
         // Latched one-shot signal used by the demo to start pedestrians only
         // when takeoff is complete and horizontal navigation is about to begin.
         navigation_ready_pub_ = pnh_.advertise<std_msgs::Bool>("navigation_ready", 1, true);
+        // Heartbeat, not a permanent one-shot: consumers must reject stale true.
+        takeoff_pub_ = pnh_.advertise<std_msgs::Bool>("takeoff_complete", 1, true);
         arm_client_ = nh_.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
         mode_client_ = nh_.serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");
         timer_ = nh_.createTimer(ros::Duration(1.0 / std::max(5.0, publish_rate_)),
@@ -136,18 +159,31 @@ public:
 
 private:
     void stateCb(const mavros_msgs::State::ConstPtr& msg) { state_ = *msg; }
+    void extendedCb(const mavros_msgs::ExtendedState::ConstPtr& msg) {
+        extended_ = *msg; extended_time_ = ros::Time::now();
+    }
 
     void mavrosPoseCb(const geometry_msgs::PoseStamped::ConstPtr& msg)
     {
-        mavros_pose_ = *msg;
-        mavros_pose_time_ = ros::Time::now();
-        if (!have_mavros_pose_)
-        {
-            home_z_ = msg->pose.position.z;
-            // Takeoff is home-relative MAVROS Z. Navigation goals are map Z:
-            // these origins are NOT interchangeable, even with aligned ENU axes.
-            target_z_ = home_z_ + takeoff_height_;
+        const auto& p = msg->pose.position;
+        const ros::Time now = ros::Time::now();
+        if (!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z) ||
+            msg->header.stamp.isZero() || (now-msg->header.stamp).toSec()>odom_timeout_ ||
+            (msg->header.stamp-now).toSec()>0.1) {
+            ground_stability_.clear(); ground_stable_=false;
+            return;
         }
+        if (phase_ == Phase::WAIT_DATA || phase_ == Phase::PRESTREAM) {
+            ground_stable_ = ground_stability_.update(msg->header.stamp.toSec(),p.x,p.y,p.z);
+        } else if (have_mavros_pose_ && (now-mavros_pose_time_).toSec()<0.5 &&
+                   std::fabs(p.z-mavros_pose_.pose.position.z)>0.5) {
+            // Do not silently reinterpret a coordinate reset as a physical
+            // climb, or automatically launch again after a flight fault.
+            flight_fault_=true;
+            ROS_ERROR("[MavrosAvoidanceController] Local height jumped; holding. Restart SITL to reinitialize.");
+        }
+        mavros_pose_ = *msg;
+        mavros_pose_time_ = now;
         have_mavros_pose_ = true;
     }
 
@@ -215,6 +251,96 @@ private:
         if (msg->header.frame_id != "map" && msg->header.frame_id != "/map") return;
         pcl::fromROSMsg(*msg, recovery_scan_);
         scan_time_ = msg->header.stamp;  // Do not treat delayed scans as fresh.
+    }
+
+    void recoveryCb(const geometry_msgs::PoseStamped::ConstPtr& msg)
+    {
+        if (msg->header.frame_id != "map" && msg->header.frame_id != "/map") return;
+        recovery_goal_ = *msg;
+        recovery_time_ = ros::Time::now();
+    }
+
+    bool guardedExplorerRecovery(const ros::Time& now, double& vx, double& vy) const
+    {
+        // Only an explorer-checked escape waypoint may move in a static
+        // warning/emergency. Never apply generic repulsion to a shelf aisle.
+        if (dynamic_risk_ != 0U || avoidance_source_ != "static_avoid" ||
+            recovery_time_.isZero() || source_time_.isZero() ||
+            dynamic_risk_time_.isZero() || scan_time_.isZero() ||
+            (now-recovery_time_).toSec() > 0.75 ||
+            (now-source_time_).toSec() > risk_timeout_ ||
+            (now-dynamic_risk_time_).toSec() > risk_timeout_ ||
+            (now-scan_time_).toSec() < 0.0 ||
+            (now-scan_time_).toSec() > 0.30 || recovery_scan_.empty() ||
+            std::hypot(recovery_goal_.pose.position.x-goal_.pose.position.x,
+                       recovery_goal_.pose.position.y-goal_.pose.position.y) > 0.03)
+        {
+            ROS_WARN_THROTTLE(2.0,"[MavrosAvoidanceController] escape authorization unavailable: source=%s dynamic=%u goal_delta=%.2f recovery_age=%.2f scan_age=%.2f",
+                avoidance_source_.c_str(),static_cast<unsigned>(dynamic_risk_),
+                std::hypot(recovery_goal_.pose.position.x-goal_.pose.position.x,
+                           recovery_goal_.pose.position.y-goal_.pose.position.y),
+                recovery_time_.isZero() ? -1.0 : (now-recovery_time_).toSec(),
+                scan_time_.isZero() ? -1.0 : (now-scan_time_).toSec());
+            return false;
+        }
+        const double dx = recovery_goal_.pose.position.x-odom_.pose.pose.position.x;
+        const double dy = recovery_goal_.pose.position.y-odom_.pose.pose.position.y;
+        const double distance = std::hypot(dx,dy);
+        if (!std::isfinite(distance) || distance < 0.01 || distance > 0.28) return false;
+        const double speed = std::min(0.08, position_kp_*distance);
+        const double step_x = speed*dx/distance*0.5;
+        const double step_y = speed*dy/distance*0.5;
+        double previous = std::numeric_limits<double>::infinity();
+        double initial = previous;
+        for (int sample=0; sample<=4; ++sample)
+        {
+            const double t = sample/4.0;
+            double nearest = std::numeric_limits<double>::infinity();
+            for (const auto& p : recovery_scan_)
+            {
+                if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) continue;
+                const double dz = p.z-odom_.pose.pose.position.z;
+                if (dz < -0.45 || dz > 0.55) continue;
+                const double x=p.x-odom_.pose.pose.position.x;
+                const double y=p.y-odom_.pose.pose.position.y;
+                if (std::hypot(x,y)<0.05 || std::hypot(x,y)>2.0) continue;
+                nearest=std::min(nearest,std::hypot(x-t*step_x,y-t*step_y));
+            }
+            if (sample==0) initial=nearest;
+            // 0.40m rotor envelope + 0.05m margin; never spend clearance to
+            // escape, including when the static risk is already level 2.
+            if (!std::isfinite(nearest) || nearest < 0.45 ||
+                nearest < initial-0.005 || (sample>0 && nearest < previous-0.005))
+            {
+                ROS_WARN_THROTTLE(2.0,"[MavrosAvoidanceController] escape scan rejected: nearest=%.3f start=%.3f previous=%.3f",
+                                  nearest,initial,previous);
+                return false;
+            }
+            previous=nearest;
+        }
+        vx=speed*dx/distance;
+        vy=speed*dy/distance;
+        return true;
+    }
+
+    bool normalMotionClear(const double vx, const double vy) const
+    {
+        // Extra forward braking on the live scan BEFORE a risk level changes.
+        // The explorer's map segment is also checked; neither check replaces
+        // the other, and stale scans are already rejected by dataFresh().
+        const double sx=vx*0.5, sy=vy*0.5;
+        if (std::hypot(sx,sy)<0.005) return true;
+        for (const auto& p : recovery_scan_)
+        {
+            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) continue;
+            const double dz=p.z-odom_.pose.pose.position.z;
+            if (dz < -0.45 || dz > 0.55) continue;
+            const double x=p.x-odom_.pose.pose.position.x;
+            const double y=p.y-odom_.pose.pose.position.y;
+            const double t=std::max(0.0,std::min(1.0,(x*sx+y*sy)/(sx*sx+sy*sy)));
+            if (std::hypot(x-t*sx,y-t*sy)<0.80) return false;
+        }
+        return true;
     }
 
     bool staticRecovery(const ros::Time& now, double& vx, double& vy) const
@@ -299,7 +425,11 @@ private:
                (now - mavros_pose_time_).toSec() <= odom_timeout_ &&
                (now - odom_time_).toSec() <= odom_timeout_ &&
                (now - risk_time_).toSec() <= risk_timeout_ &&
-               (now - avoidance_time_).toSec() <= risk_timeout_;
+               (now - avoidance_time_).toSec() <= risk_timeout_ &&
+               (!require_fresh_scan_ ||
+                (!scan_time_.isZero() && !recovery_scan_.empty() &&
+                 (now - scan_time_).toSec() >= 0.0 &&
+                 (now - scan_time_).toSec() <= 0.30));
     }
 
     void timerCb(const ros::TimerEvent&)
@@ -315,6 +445,14 @@ private:
             publish(command);
             return;
         }
+        if ((now-mavros_pose_time_).toSec()>odom_timeout_ ||
+            (now-mavros_pose_.header.stamp).toSec()>odom_timeout_ || flight_fault_) {
+            // publish() makes the heartbeat false while pose is stale. Do not
+            // erase completed takeoff on a brief dropout: fresh, unchanged
+            // airborne data can recover without launching/arming again.
+            ROS_WARN_THROTTLE(2.0,"[MavrosAvoidanceController] Holding: stale pose or local-frame reset.");
+            publish(command); return;
+        }
 
         if (phase_ == Phase::WAIT_DATA)
         {
@@ -324,8 +462,19 @@ private:
 
         if (phase_ == Phase::PRESTREAM)
         {
+            const bool ground_ok = !enable_control_ || !auto_arm_ ||
+                ((now-extended_time_).toSec()<2.0 &&
+                 extended_.landed_state==mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND);
+            if (!ground_stable_ || !ground_ok) {
+                ROS_WARN_THROTTLE(2.0,"[MavrosAvoidanceController] Waiting for stable ground pose before arming.");
+                publish(command); return;
+            }
             if ((now - phase_start_).toSec() >= prestream_seconds_)
             {
+                // Re-evaluate on the ground immediately before arming; a first
+                // pose from an earlier estimator origin must never survive.
+                home_z_ = mavros_pose_.pose.position.z;
+                target_z_ = home_z_ + takeoff_height_;
                 requestFlightMode(now);
                 if (!auto_arm_ || (state_.mode == "OFFBOARD" && state_.armed))
                 {
@@ -338,7 +487,11 @@ private:
             return;
         }
 
-        requestFlightMode(now);
+        if (enable_control_ && auto_arm_ && (!state_.armed || state_.mode!="OFFBOARD")) {
+            takeoff_confirmed_=false;
+            ROS_WARN_THROTTLE(2.0,"[MavrosAvoidanceController] Flight mode/arming lost; no automatic re-arm in flight.");
+            publish(command); return;
+        }
 
         // During flight, compare map goal Z with map odometry Z. Using MAVROS
         // Z here caused each RViz 2D goal to add the map/local origin offset.
@@ -350,11 +503,20 @@ private:
 
         if (phase_ == Phase::TAKEOFF)
         {
-            if (std::fabs(z_error) <= takeoff_tolerance_)
+            const bool airborne = !enable_control_ || !auto_arm_ ||
+                ((now-extended_time_).toSec()<2.0 &&
+                 extended_.landed_state==mavros_msgs::ExtendedState::LANDED_STATE_IN_AIR);
+            if (std::fabs(z_error) <= takeoff_tolerance_ && airborne)
             {
-                phase_ = Phase::NAVIGATE;
-                phase_start_ = now;
-                ROS_INFO("[MavrosAvoidanceController] Takeoff complete; waiting for navigation goal.");
+                if (takeoff_since_.isZero()) takeoff_since_=now;
+                if ((now-takeoff_since_).toSec()>=takeoff_settle_seconds_) {
+                    phase_ = Phase::NAVIGATE;
+                    phase_start_ = now;
+                    takeoff_confirmed_=true;
+                    ROS_INFO("[MavrosAvoidanceController] Takeoff complete; waiting for navigation goal.");
+                }
+            } else {
+                takeoff_since_=ros::Time();
             }
             publish(command);
             return;
@@ -410,7 +572,7 @@ private:
         if (!have_goal_ || !dataFresh(now))
         {
             command.twist.linear.z = 0.0;
-            ROS_WARN_THROTTLE(1.0, "[MavrosAvoidanceController] Holding: goal or fresh avoidance chain missing.");
+            ROS_WARN_THROTTLE(1.0, "[MavrosAvoidanceController] Holding: goal, scan, or fresh avoidance chain missing.");
             publish(command);
             return;
         }
@@ -447,6 +609,11 @@ private:
         {
             command.twist.linear.x = nav_x;
             command.twist.linear.y = nav_y;
+            if (require_fresh_scan_ && !normalMotionClear(nav_x,nav_y))
+            {
+                command.twist.linear.x = command.twist.linear.y = 0.0;
+                ROS_WARN_THROTTLE(2.0, "[MavrosAvoidanceController] live scan blocks forward motion inside 0.80m; awaiting explorer replan");
+            }
         }
         else if (risk_level_ == 1U)
         {
@@ -457,8 +624,9 @@ private:
                 // 仍会立即切换到主动逃逸速度。
                 command.twist.linear.x = 0.0;
                 command.twist.linear.y = 0.0;
-                const bool recovering = staticRecovery(now, command.twist.linear.x,
-                                                        command.twist.linear.y);
+                const bool recovering = guardedExplorerRecovery(now, command.twist.linear.x,
+                                                                 command.twist.linear.y) ||
+                    staticRecovery(now, command.twist.linear.x,command.twist.linear.y);
                 ROS_INFO_THROTTLE(1.0, "[MavrosAvoidanceController] level1 source=%s action=%s",
                     avoidance_source_.c_str(), recovering ? "guarded_static_retreat" : "hold");
             }
@@ -474,10 +642,22 @@ private:
         }
         else
         {
-            // Emergency level suppresses goal attraction; moving away from the
-            // threat has priority over progress toward the goal.
-            command.twist.linear.x = avoidance_.twist.linear.x;
-            command.twist.linear.y = avoidance_.twist.linear.y;
+            // A nearest-obstacle repulsion vector is not a collision-checked
+            // escape trajectory. In warehouse exploration, stop horizontal
+            // motion on level 2: moving away from one shelf may hit another.
+            if (hold_on_level2_)
+            {
+                command.twist.linear.x = 0.0;
+                command.twist.linear.y = 0.0;
+                if (!guardedExplorerRecovery(now, command.twist.linear.x,
+                                             command.twist.linear.y))
+                    ROS_ERROR_THROTTLE(2.0, "[MavrosAvoidanceController] level2 emergency: XY HOLD; no fresh collision-checked escape.");
+            }
+            else
+            {
+                command.twist.linear.x = avoidance_.twist.linear.x;
+                command.twist.linear.y = avoidance_.twist.linear.y;
+            }
         }
         limit2D(command.twist.linear.x, command.twist.linear.y, max_total_speed_);
         ROS_INFO_THROTTLE(0.5, "[MavrosAvoidanceController] risk=%u goal_d=%.2f cmd=(%.2f %.2f %.2f)",
@@ -489,14 +669,32 @@ private:
 
     void publish(const geometry_msgs::TwistStamped& command)
     {
+        std_msgs::Bool ready;
+        const auto now=ros::Time::now();
+        ready.data=takeoff_confirmed_ && !flight_fault_ && state_.connected &&
+            (now-mavros_pose_time_).toSec()<=odom_timeout_ &&
+            (now-mavros_pose_.header.stamp).toSec()<=odom_timeout_ &&
+            (!enable_control_ || !auto_arm_ || (state_.armed && state_.mode=="OFFBOARD" &&
+             (now-extended_time_).toSec()<2.0 &&
+             extended_.landed_state==mavros_msgs::ExtendedState::LANDED_STATE_IN_AIR));
+        takeoff_pub_.publish(ready);
         preview_pub_.publish(command);
         if (enable_control_) setpoint_pub_.publish(command);
     }
 
     ros::NodeHandle nh_, pnh_;
     ros::Subscriber state_sub_, mavros_pose_sub_, odom_sub_, goal_sub_;
+    ros::Subscriber extended_sub_;
+    mavros_msgs::ExtendedState extended_;
+    ros::Time extended_time_, takeoff_since_;
+    PoseStability ground_stability_;
+    bool ground_stable_{false}, flight_fault_{false}, takeoff_confirmed_{false};
+    double takeoff_settle_seconds_{1.0};
+    ros::Publisher takeoff_pub_;
     ros::Subscriber final_goal_monitor_sub_, risk_sub_, avoidance_sub_;
-    ros::Subscriber source_sub_, dynamic_risk_sub_, scan_sub_;
+    ros::Subscriber source_sub_, dynamic_risk_sub_, scan_sub_, recovery_sub_;
+    geometry_msgs::PoseStamped recovery_goal_;
+    ros::Time recovery_time_;
     pcl::PointCloud<pcl::PointXYZ> recovery_scan_;
     std::string avoidance_source_;
     std::uint8_t dynamic_risk_{255U};
@@ -516,6 +714,8 @@ private:
     bool enable_control_{false}, auto_arm_{true}, auto_goal_{true};
     bool use_path_planner_{true};
     bool stop_on_level1_{true};
+    bool hold_on_level2_{false};
+    bool require_fresh_scan_{false};
     bool have_mavros_pose_{false}, have_odom_{false}, have_goal_{false};
     bool have_risk_{false}, have_avoidance_{false};
     bool navigation_ready_sent_{false};

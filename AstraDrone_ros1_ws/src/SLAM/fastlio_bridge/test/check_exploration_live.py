@@ -76,7 +76,8 @@ def main():
                     report['min_person_center_xy_m']=min(s['uav_person_xy'] for s in samples)
                     report['min_surface_xy_m']=min((s['surface_xy'] for s in samples if s['surface_xy'] is not None),default=None)
                     report['min_cruise_surface_xy_m']=min((s['surface_xy'] for s in samples
-                        if s['surface_xy'] is not None and s['status']['state'] not in ('TAKEOFF','WAIT_FRESH_DATA')),default=None)
+                        if s['surface_xy'] is not None and s['status']['state'] not in
+                        ('TAKEOFF','WAIT_FRESH_DATA','WAIT_TAKEOFF_CONFIRMATION')),default=None)
                     report['state_counts']={state:sum(s['status']['state']==state for s in samples)
                                             for state in set(s['status']['state'] for s in samples)}
                     Path(args.output).write_text(json.dumps(report,indent=2),encoding='utf8')

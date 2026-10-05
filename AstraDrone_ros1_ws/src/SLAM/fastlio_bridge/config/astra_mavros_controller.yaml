@@ -16,6 +16,12 @@ absolute_goal_y: 12.0
 absolute_goal_z: 1.5
 takeoff_height: 1.5
 prestream_seconds: 3.0
+# 初始化门控：只在地面连续稳定后取起飞基准，单位秒/米。
+# 不要用“第一次收到pose”或强制解锁代替它；负Z本身是合法局部坐标。
+ground_stable_seconds: 3.0
+ground_z_range: 0.12
+ground_xy_range: 0.25
+takeoff_settle_seconds: 1.0 # 高度到达且PX4确认在空中后连续驻留，再允许探索
 goal_delay_seconds: 3.0
 position_kp: 0.45
 altitude_kp: 0.8

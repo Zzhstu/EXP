@@ -45,6 +45,9 @@ def main():
             time.sleep(.1)
         rospy.init_node('mission_fixture_driver',disable_signals=True)
         for key,value in dict(bounds=[0.,0.,8.,8.],no_frontier_seconds=1.,settle_seconds=.5,
+                              initial_window_radius=6.,growth_margin=0.,
+                              require_takeoff_confirmation=False,
+                              surface_min_views=2,convergence_seconds=3.,inspection_revisit_seconds=.5,
                               home_settle_seconds=1.,max_mission_seconds=100.,return_timeout=30.,
                               planning_hz=5.,report=str(folder/'status.json')).items():
             rospy.set_param('/mission_fixture/'+key,value)
@@ -72,7 +75,7 @@ def main():
         while time.monotonic()-began<130:
             if any(p.poll() is not None for p in processes): raise RuntimeError('fixture process exited')
             stamp=rospy.Time.now()
-            z=0. if time.monotonic()-began<3 else 1.2
+            z=1.2  # synthetic airborne fixture; not an initialization/takeoff test
             target=state.get('waypoint')
             if target is not None:
                 delta=np.array([target.pose.position.x,target.pose.position.y])-position
@@ -88,9 +91,11 @@ def main():
                 pub.publish(create_cloud_xyz32(odom.header,free if key=='free' else walls))
             status=state.get('status',{})
             if status.get('state')=='COMPLETE':
-                passed=bool('INSPECTING' in phases and 'RETURNING' in phases and saves and
-                            status.get('finish_reason')=='reachable_viewpoints_exhausted' and
-                            status.get('home_confirmed'))
+                # This closed accessible room must CONVERGE, not merely stop
+                # with a partial map. Partial exhaustion is tested separately.
+                passed=bool('INSPECTING' in phases and 'RETURNING' in phases and len(saves)==1 and
+                            status.get('finish_reason')=='observed_reachable_converged' and
+                            status.get('exploration_complete') and status.get('home_confirmed'))
                 result=dict(passed=passed,phases=sorted(phases),save_calls=len(saves),mission=status,
                             note='Synthetic kinematic integration only, not warehouse completeness or PX4 safety')
                 (folder/'result.json').write_text(json.dumps(result,indent=2))

@@ -1,0 +1,26 @@
+# AstraDrone FreeDOM baseline. Fed by FAST-LIO's deskewed
+# /cloud_registered_body (body/IMU coordinates) and camera_init->body TF.
+# Do not feed /cloud_registered: that cloud is already world-frame.
+sensor:
+  min_range: 0.6
+  max_range: 35.0
+  min_z: -12.0
+  max_z: 12.0
+map:
+  sub_voxel_size: 0.10  # exported static points are resolved at this scale
+  voxel_depth: 2        # free-space voxel = 0.40m; report this difference vs ours
+  block_depth: 5
+  enable_local_map: false # retain whole warehouse for final global-map comparison
+  raycast_max_range: 35.0
+  raycast_min_z: -2.0
+  raycast_max_z: 5.0
+  counts_to_free: 6
+  counts_to_revert: 20
+  conservative_connectivity: 26
+  aggressive_connectivity: 124
+raycast_enhancement:
+  # No verified MID360 FOV mask exists here. Never infer unobserved directions
+  # as free on a non-repeating scan. This is FreeDOM without ray enhancement,
+  # not a claim to reproduce the paper's full reported configuration.
+  enable_raycast_enhancement: false
+num_threads: 4

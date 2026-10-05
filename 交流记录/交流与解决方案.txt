@@ -544,3 +544,213 @@
 实际改动：源码快照提交a1f0c4895894148f6c4e87d95980680ceb012417，包含93个变更文件、10515行新增/100行删除，含仓库导航、动态地图、探索WIP、回环可选代码、测试、可视化示例、技术文档及双交流记录。生成mat_pre.txt和空objects文件仅取消暂存，本地内容未删除；bag、运行生成PCD与build/devel未加入。补充本条与学术发布记录作为收尾文档提交。
 验证结果：28项Python单测通过；提交前git diff --cached --check通过。SSH推送返回4e71276..a1f0c48成功；独立git ls-remote确认astradrone-integrated的远端完整哈希等于a1f0c4895894148f6c4e87d95980680ceb012417。没有推送origin、没有修改EXP main，没有强制推送。
 状态与待办：当前源码上传完成，地址https://github.com/Zzhstu/EXP/tree/astradrone-integrated；本收尾记录另行正常推送，不递归记录其自身提交号。自主探索长程RETURN_BLOCKED、完整三维覆盖和Gazebo卸载崩溃仍未解决；本轮没有重新全量编译或飞行测试。大体积实验产物仍在本机，不是云端数据备份。
+
+[N036] 2026-09-29 15:13（Asia/Shanghai）｜分别整理当前demo启动方式
+用户问题/需求：分别列出当前几个demo的启动方式。
+解决思路/答复：统一先进入/home/a/AstraDroneOpen，再分别列example badcase、example ours、cangku仓库导航、仓库自主探索四个主要演示命令；补充pc_example基础键盘建图、pc_dynamic_avoidance旧多终端避障、长走廊基线和loop_closure回环专项入口。说明每次只启动一个，不另加FAST-LIO/Offboard控制器；comparison/仓库导航默认报告后持续运行，探索默认成功返航驻留保存后结束，回环自动航线结束录包不等于关闭全部窗口。
+实际改动：只追加双记录；没有更改脚本、算法、参数、地图或备份，没有启动仿真、提交或推送Git。
+验证结果：完整读取AGENTS与双记录，再核对7个不同shell入口、两个Python运行器参数和结束分支；7个shell的bash -n均退出0。warehouse_dynamic_demo.sh包装ours --scene cangku；comparison默认example、--auto-stop默认关闭、--max-flight-seconds仅限制采样阶段。探索支持--headless、--manual-pedestrian、--return-after-goals和--keep-open，默认test_seconds=0，COMPLETE且home_confirmed后才正常结束。pc_example当前启动keyboard_control而不是自动圆轨迹，旧入口依赖gnome-terminal，pc_example还调用qgc。回环脚本保留自动闭合航线和报告。只核对源码及语法，未声称本轮逐一实跑或编译通过。
+状态与待办：启动命令整理完成；探索RETURN_BLOCKED及未完成三维覆盖、回环历史误约束和Gazebo卸载异常仍保留，不作为本轮已修复。默认持续展示规则不可泛化到探索/回环；停止多终端旧入口需分别停止相关终端中的节点。
+
+[N037] 2026-09-29 15:18（Asia/Shanghai）｜按demo组织完整启动、行人操作与展示流程
+用户问题/需求：行人控制和主启动命令必须一起给出，不能放在单独的通用部分；希望展示每个demo的完整功能与程序。
+解决思路/答复：为example badcase、example ours、cangku导航、自主探索及旧多终端动态避障分别列主终端启动、同组内第二终端环境/键盘命令、接管时机、选人和WASD操作、RViz观测、目标/任务交互及产物；基础键盘建图、走廊和回环按各自实际功能说明没有同样的行人接口。探索提供默认自动行走后接管及启动时--manual-pedestrian的二选一，不同时驱动同一话题。
+实际改动：只追加双记录，无算法、脚本、launch、配置、地图或备份改动，无仿真控制、Git提交/推送。
+验证结果：重新完整读取双记录，核对pedestrian_control.py、warehouse_pedestrian.py、exploration_pedestrian_walk.py、两个运行器和启动入口；7个shell bash -n通过，3项test_demo_utilities工具单测通过。example键盘等待/demo/pedestrian/ready=true；仓库0号立即ready，但探索自动行走期间ready不代表可以无竞争接管，须等walk_status=finished_keyboard_ready或使用--manual-pedestrian。keyboard输出0/1选择、W/S世界Y、A/D世界X、空格停/Q退出、0.4秒无命令停车；仓库只有0号。run_dynamic_comparison仅ours自动启动save_navigation_map，badcase默认没有/demo/save_map，不能错误套用保存命令。pc_dynamic_avoidance当前确实启动astra_pedestrians.launch和relay，可横穿后接管；本轮过程曾先说该旧入口没有相同键盘接口，已按当前源码明确更正。pc_example直接启动外部astra_pedsim.launch，不提供本项目新增relay键盘接口；走廊与回环不启动行人。
+状态与待办：分demo操作说明完成，关键功能和退出/数据边界如实说明；本轮未运行全部GUI/飞行，不宣称键盘/安全/动态分割在所有入口均已实测。探索长程RETURN_BLOCKED、货架覆盖、回环误约束、Gazebo卸载问题仍未完成。手动移动发生在有限bag收尾之后不进入旧指标，最终ours地图保存与录包报告是不同时间边界。
+
+[N038] 2026-09-29 16:00（Asia/Shanghai）｜自主探索不自动起飞的启动高度基准诊断
+用户问题/需求：自主探索建图demo为什么飞机不自动飞行了。
+解决思路/答复：完整读取规则和双记录后，只读检查最新155232场次状态、探索/控制器/PX4日志和真实ULog，区分未起飞、暂停、时限、返航受阻。确认本次是启动时固定未稳定MAVROS高度导致起飞目标失效，而不是此前RETURN_BLOCKED。负Z坐标本身不是错误，错误在于初始化高度变动后仍使用旧基准。控制器首次pose锁定home_z，探索器首次pose也锁定home；没有稳定性/初始化复位门控，bridge首次同步也固定对齐。
+实际改动：仅追加两份记录；没有修改算法、参数、启动文件，没有发送解锁/起飞/探索服务调用，没有启动或停止用户仿真、编译、安装依赖或Git发布。
+验证结果：检查时没有相关仿真进程，故本轮依据落盘最新场次而非在线飞行。warehouse_20260929_155232_result.json为interrupted，末状态HOLD_START_NOT_SAFE、EXPLORING、选出/到达目标0/0、23541地图点，未完成任务。探索日志takeoff_height=1.2、enable_control=true、auto_arm=true，sim7.139记录TAKEOFF to -0.67 m，无Takeoff complete；PX4反复Armed by external command后Disarmed by auto preflight disarming。使用已有pyulog读取/home/a/.ros/log/2026-09-29/07_52_41.ulg和07_56_56.ulg：首段本地高度初始化变化、z_valid从0到1、z_reset_counter从1到2；sim7.138换成ENU高度约0.0157m，末段约-0.022m，两段landed始终1；末段trajectory_setpoint NED velocity[2]恒+0.5m/s（下降）。按实际源码公式，以日志-0.67m目标反推旧home约-1.87m，7.138时垂向指令限幅为ENU -0.5m/s；探索器表观相对高度约1.886m超过1.1m起飞门限，说明初始化变化可误触发起飞完成判据。bridge初始对齐平移Z=-1.8648m，探索后期航点Z约-1.88m，低高度切片伴随静态risk1/2；这些是同一启动错误链路线索，未将每个危险点强行认定为地面真值。地图23541点是起点附近快照而非自主探索完成。
+状态与待办：本次不飞原因已定位，尚未修复或新仿真复测。建议获准实现后统一起飞初始化：等待有效且稳定的PX4本地位姿、在解锁前确认地面基准、处理初始化/坐标复位，并让探索器使用控制器确认的真实起飞状态；bridge对齐同时核对稳定性。保持安全距离不变，验证冷启动、初始化漂移/复位、真实起飞和探索推进，再另外处理历史长程返航及卸载问题；不能以重启偶尔成功证明修复。
+
+[N039-阶段1] 2026-09-29 16:11（Asia/Shanghai）｜进行中：起飞基准与探索确认已修改、开始仓库复测
+用户问题/需求：明确要求直接修复，不要只定位问题。
+解决思路/答复：地面稳定后才固定起飞基准；探索运行器同时延后SLAM/bridge启动，避免首次对齐锁住初始化瞬态；探索器等待控制器真实起飞完成心跳，不再自行用首次高度判断。保持既有规划/风险距离。
+实际改动：修改前相关bridge、入口、规则、双记录备份到/home/a/AstraDroneOpen_backups/takeoff_fix_20260929_1610/before.tar.gz，tar比较通过，SHA256=24cf87fa47bf8e11942b6d9627d58b2d8d380c3cb84c34e829309d9d2d62149d；不覆盖旧完整备份。新增C++地面稳定窗口、Python启动检查及回归工具，控制器解锁前确定当前基准、空中高度驻留后确认、飞行高度突变/模式丢失不反复自动解锁；探索器拒绝缺失/false/过期确认。更新参数注释、安装清单、合成fixture和说明。
+验证结果：fastlio_bridge catkin构建退出0，32项Python单测及独立C++窗口测试通过；独立11359 master上的真实编译控制器6项fake-FCU测试通过：不提前解锁、上升指令、地面不误确认、空中驻留确认、坐标跳变保持、故障不再次解锁。测试master清理完成；不是PX4/Gazebo实飞，下一阶段才做冷启动。
+状态与待办：进行中；需真实仓库起飞/选点/行走清图/导出回归和最终源码审查。旧长程返航、完整覆盖及Gazebo原生卸载问题仍不标为解决。没有Git提交推送。
+
+[N039-阶段2] 2026-09-29 16:21（Asia/Shanghai）｜进行中：冷启动等待修正后真实起飞成功
+用户问题/需求：同N039，要求实际修复并验证自动飞行。
+解决思路/答复：保留启动失败证据，修复等待检查的时间基准与持久订阅，防止新门控自身把有效数据拒绝；不是降低避障安全距离。
+实际改动：运行器在rospy.init_node之前明确设置use_sim_time；地面等待改持续订阅，重复时间戳不计新证据也不清空已有窗口；落地状态同时检查仿真采集时间和墙钟接收断流，适配慢速Gazebo。新增时钟初始化顺序、慢速状态更新与重复消息回归。
+验证结果：161124、161338两次新增启动门控超时，161817第三次主动中止排查，均未进入飞行，不能算成功。阶段性评论曾把重复缓存/墙钟超时当主要原因，进一步只读核验发现稳定位姿仍被拒绝的关键原因是运行器早于Gazebo初始化、保持系统时钟，和MAVROS仿真时间不一致；此处补充更正，不把先前推测记成已证实的唯一原因。最终版本35项Python单测通过，独立C++窗口及fake-FCU六项通过，仓库狭窄通道/风险/航点/空闲证据ROS回归通过。162006真实仓库冷启动：稳定地面Z=0.059m后启动SLAM，在线State为armed=true、mode=OFFBOARD；Gazebo机体高度约1.256m，takeoff_complete=true、探索OBSERVING，证明已实际离地而非只看状态日志。
+状态与待办：进行中；继续观察自主选点、返航、行走清图与PCD。短程测试不是全仓库完整覆盖或实物安全验证；不自动解除旧长程返航限制，没有提交/推送。
+
+[N039] 2026-09-29 16:30（Asia/Shanghai）｜自动起飞故障已实施修复并验证；探索导航限制保留
+用户问题/需求：帮忙修改并修复仓库自主探索demo不自动飞行的问题，不要只定位。
+解决思路/答复：统一仿真时钟，等待稳定地面位姿后初始化SLAM/bridge；控制器在解锁前重取当前地面基准，以实际空中状态和高度驻留发布起飞确认。探索器等待新鲜确认，禁止首次高度漂移触发规划；不修改规划净空、机体尺寸、风险距离或原world。正常启动仍为bash scripts/run_sh/warehouse_exploration_demo.sh，不要求额外启动飞控或FAST-LIO。
+实际改动：run_warehouse_exploration.py在rospy初始化前设置use_sim_time并调用新增startup_checks.py；新增pose_stability.hpp，修改mavros_avoidance_controller.cpp、warehouse_explorer.py和地面稳定/起飞驻留参数注释；补catkin安装项、探索说明、Python/C++及隔离fake-FCU测试，调整合成fixture等待窗口。控制器短暂位姿断流输出零速度、撤销发布确认，新鲜且未触发故障的数据恢复后可继续而不重新解锁；高度突变、模式/解锁丢失不会自动反复解锁。最终审查另补发布端采集时间检查，防止刚收到但采集已过期的位姿继续发布true。修改前备份路径和校验见阶段1，保留原备份；没有提交或推送GitHub。
+验证结果：最终fastlio_bridge catkin_make --pkg fastlio_bridge -j2 -l2退出0（/tmp/astra_takeoff_build4.log）；35项Python单测、独立C++窗口测试、validate_project、shell语法和局部git diff --check通过。最初单测未设置PedSim Python路径而导入失败，补现有/home/a/pedsim_ws/devel/lib/python3/dist-packages后35项通过，没有安装新依赖。最终真实编译控制器隔离fake-FCU九项通过，结果/tmp/astra_takeoff_controller_acquisition_final_20260929/result.json，覆盖不提前解锁、上升、地面不误确认、空中驻留、断流保持、恢复不重解锁、采集过期、坐标跳变保持、故障不重解锁；该测试不连接真实PX4硬件。仓库狭窄通道/高度带/风险阈值/重复目标高度/自由空间证据/航点回归通过（/tmp/astra_takeoff_clearance_final.log）。
+真实仿真证据：162006和162512两次冷启动均实际离地、armed=true、OFFBOARD、起飞确认true并自主选点飞行。第一场最终航程7.897m，但持续RECOVER_CLEARANCE、0到达目标，请求返航后仍未到家；主动Ctrl-C结束，导出54189点，termination=interrupted、home_confirmed=false，不能记成功探索。第二场在断流恢复修正后运行，实际空中Z约1.28–1.35m，1个观察目标到达，航程6.767m、已知平面自由面积108.32m²、45900点PCD；显式测试参数--test-seconds 100到期时RETURNING，termination=explicit_test_timeout_partial、home_confirmed=false，不能记成功返航。正常启动不带此测试时限。两份PCD有限XYZ数量及SHA256校验一致；保存位于exploration_demo_runs/warehouse_20260929_162006_final_map.pcd和warehouse_20260929_162512_final_map.pcd。第二场站立初始ROI最大53点，行人离开约2.92m后2点，只支持该重新观测局部残余降低，背景/人体未标注，不称零鬼影；第一场初始ROI为0，不能用来证明清除。只读采样器在master退出后曾重复最后快照，不能将其state_counts直接换算飞行时长；航程/目标数以运行器最终状态为准。最后采集时间发布守卫在两次真实飞行后补入，已重新编译并通过九项控制回归，未为这一行守卫再次运行整场SITL。关闭日志仍有已有Gazebo原生Segmentation fault；相关进程已清理，数据已保存，不掩盖卸载错误。
+状态与待办：本轮不自动起飞的问题已改并有实际离地、自主飞行和目标到达证据，不声称所有bug消失。持续安全退让/返航连通性、整仓库三维覆盖、未重新观测的动态残影及Gazebo卸载崩溃仍未解决；未测试真机、真实坐标复位补偿或飞行安全认证。两次短测不能保证所有启动/场景均成功。源代码与记录保留本地，未自动发布。
+
+[N040-阶段1] 2026-09-29 16:30（Asia/Shanghai）｜进行中：黑箱自主探索与速度优化
+用户问题/需求：自主探索demo速度太慢；确认是否提前知道仓库地图并要求改为类似黑箱区域的自主探索；要求直接解决。
+解决思路/答复：已完整读取项目规则与两份历史记录。当前前沿探索器确实从FAST-LIO/局部自由空间观测生成frontier，不读取货架真值盒；但栅格固定边界[-4,-12,47,15]先验给了任务工作区矩形，飞行高度也固定。仓库导航把速度限在0.25m/s，是明确慢速瓶颈之一。拟改为围绕启动位置的有限计算窗口，并只因无人机位姿/雷达实际自由空间观测扩边；提高该探索launch专属速度，同时维持净空/风险阈值。严格任意三维无限黑箱探索受有限地图容量与固定高度限制，需如实标界。
+实际改动：已在修改前建立独立备份/home/a/AstraDroneOpen_backups/blackbox_exploration_20260929_1630/before.tar.gz（SHA256=cf0efb11525d147a471f51a0a61762b759551b63cacb21c5628beea2bc7f386e），包含计划修改的栅格、探索器、配置、launch、测试、说明和双记录。代码尚未改，任务进行中。
+验证结果：只读源码核对确认规划器无Gazebo真值订阅/货架盒输入，工作区矩形参数及探索速度上限如上；前沿点来自可达已知自由区和未知边界。尚无新测试或仿真。
+状态与待办：进行中。完成观测驱动的动态栅格增长、地图边界/速度配置与回归测试，再进行仿真及最终审查；不把平面固定高度探索表述为任意三维完全未知环境探索。
+
+[N040-阶段2] 2026-09-29 16:45（Asia/Shanghai）｜进行中：滚动窗口、专属限速和单元回归完成
+用户问题/需求：同N040，要求加速并消除对仓库外形的先验依赖，直接修改。
+解决思路/答复：以前沿搜索继续根据测量得到的自由空间和占用地图选点；固定外边界只作为有上限的计算资源窗口，车辆/传感器观测接近边缘时扩张，新增区保持未知。速度仅在探索launch覆盖通用窄通道0.25m/s限速到0.45m/s，不改变净空、风险与停车阈值。
+实际改动：`exploration_grid.py`新增按实测点扩窗，容量失败不修改地图并显式hold；探索器初始化为以map原点为中心的12m半径窗口，只用当前位姿/新鲜近飞行高度自由空间点触发增长，并平移target/visited/blacklist/failed/inspection索引。配置移除[-4,-12,47,15]，加4m触发边距、8m扩窗块、20万格上限及二维限制注释。仅`warehouse_exploration.launch`提升0.45m/s。更新演示说明及栅格/任务测试。修改前备份见阶段1。
+验证结果：20项栅格/任务测试通过；`py_compile`通过；roslaunch参数展开可解析，实值max_navigation_speed=0.45、max_total_speed=0.65，静态safe/emergency clearance仍为0.30/0.25、uav_radius=0.40、规划inflation=0.80，未变。初次执行有1个测试失败源于相差浮点数精度，改为数值容差后通过；随后又通过修正合成地图边缘场景，未改变生产算法。headless SITL尚未开始。
+状态与待办：进行中；下一步独立冷启动headless短测，检查探索状态、路径位移、返航与退出日志，再复查代码和记录。速度上限不是飞行全程实测速率；二维固定高度仍不是任意三维黑箱探索。
+
+[N040] 2026-09-29 17:25（Asia/Shanghai）｜自主探索边界先验移除、速度配置优化并完成短程回归
+用户问题/需求：自主探索demo运行太慢；询问是否预先知道仓库地图形状，要求改为只靠自身观测探索类似黑箱区域，直接解决。
+解决思路/答复：经代码核实旧frontier逻辑已由观测自由空间生成视点，但任务矩形[-4,-12,47,15]先验限制边界；它没有预载货架几何。删除这个场景尺寸先验，以有限计算窗口保护资源；根据无人机位姿及新鲜激光自由空间观测向外扩窗，新区保持未知，不允许穿行。提高独立探索demo的导航速度上限和安全航段前视距离，保留风险停车、机体包络与净空。
+实际改动：改`fastlio_bridge/scripts/exploration_grid.py`和`warehouse_explorer.py`实现滚动栅格及索引平移；`config/warehouse_exploration.yaml`删除bounds，新增initial_window_radius=12m、growth_margin=4m、growth_chunk=8m、max_grid_cells=200000，固定高度/二维限制注释更明确，探索lookahead从0.60调为0.80m；`launch/warehouse_exploration.launch`仅该demo把max_navigation_speed从warehouse通用0.25改为0.45m/s。风险阈值与规划inflation不改。更新21个栅格/任务回归、探索说明；修改前备份`/home/a/AstraDroneOpen_backups/blackbox_exploration_20260929_1630/before.tar.gz`，SHA256=`cf0efb11525d147a471f51a0a61762b759551b63cacb21c5628beea2bc7f386e`。无Git提交/推送。
+验证结果：21项探索格栅/任务单测通过，包含扩窗坐标稳定、新区未知、容量失败不改状态、任务索引同步；Python `py_compile`、入口`bash -n`、局部`git diff --check`通过。`roslaunch --dump-params`确认最终实参lookahead=0.8、max_navigation_speed=0.45、max_total_speed=0.65、static safe/emergency clearance=0.30/0.25、uav_radius=0.40、planner inflation=0.80均符合预期。
+真实SITL：最终配置冷启动 headless，以`--return-after-goals 1 --test-seconds 150`做一目标链路测试，飞行器自主选点、到达1目标、返航确认并保存；报告`termination=returned_home_and_saved`、home_error=0.2684m、仿真70.221s/墙钟120.651s、航程11.843m、已知二维自由面积112.16m²、维护PCD 46609点（`exploration_demo_runs/warehouse_20260929_172101_result.json`、`warehouse_20260929_172101_final_map.pcd`）。这是显式一个目标后提前返航的部分任务，不是整仓库探索；coverage_complete=false。相应实测RTF约0.58，是演示墙钟耗时仍偏慢的原因之一；无严格旧新参数A/B，不能声称统计提速。窗口扩展由单元/集成夹具验证，真实短测没有专门记录窗口尺寸变化。仿真关闭仍出现原生Segmentation fault，尚未修复，也未掩盖。前一配置短测无lookahead调整也成功返回，最终指标以最后场次为主。
+状态与待办：此轮要求已修改并完成短程回归；当前属于“场景几何未知的固定高度二维frontier探索”，不是三维任意高度/楼层的完全黑箱探索。未知边界窗口有20万格资源上限，容量不足安全hold；如需任意大场景需调整分辨率/分区存储。RTF仍约0.58，可后续优化Gazebo/点云链路，但先测性能瓶颈而不是继续盲目加速。长程覆盖/返航、实际窗口增长在线统计、有效速度A/B、真机验证、仿真卸载segfault均未解决；没有GitHub发布。
+
+[N041] 2026-09-29 18:46（Asia/Shanghai）｜探索结束判据与本次PCD地图查看
+用户问题/需求：询问自主探索是否有结束指标，以及刚运行产生的“pcb”点云如何查看（实际扩展名为.pcd）。
+解决思路/答复：区分流程结束与地图完整性：探索阶段连续30仿真秒无可选前沿转近距补扫，补扫阶段连续30仿真秒无可选视点再返航；起点平面距离≤0.30m连续5仿真秒且保存成功才COMPLETE，默认退出，--keep-open例外。3600仿真秒预算触发部分任务返航，返航1200仿真秒超时失败；显式目标限额和操作员请求也可返航。coverage_complete当前固定false，没有三维表面覆盖率或地图收敛完成度判据，不以PCD存在或failed=false证明任务成功。给出已安装pcl_viewer直接查看最新实际地图的完整命令及在线status/手动返航命令。
+实际改动：仅追加双交流记录，没有修改算法、参数、启动文件、地图或备份，没有启动飞行或Git提交推送。
+验证结果：完整读取规则和双记录后核对warehouse_explorer.py、warehouse_exploration.yaml及运行器退出分支。按文件mtime定位最新场次warehouse_20260929_173147，18:39:41保存exploration_demo_runs/warehouse_20260929_173147_final_map.pcd；二进制XYZ头部269265点，文件3231349字节，SHA256=dd452ecbe1a231c8f0a9e207dc4209fd1d2a035ce285b700882467953a085bca与元数据一致，来源/uav1/fastlio/cloud_map、frame=map。对应_result.json为termination=interrupted、failed=false、state=EXPLORING、home_confirmed=false、finish_reason为空；目标到达90/选择99、候选170、航程558.184m、known_free_area=1165.96m²、wall_seconds=4054.416（约67.6分钟）、最后仿真stamp=1963.188（约32.7分钟，stamp不是严格任务累计时长），尚未触发3600仿真秒预算，不能记自动结束成功。确认/usr/bin/pcl_viewer存在，--help仅提示窗口内按H帮助并退出255，没有实际打开GUI或评估地图质量。辅助尝试pcd_to_pointcloud无参数时因本地没有ROS master进入等待，已SIGINT停止本轮创建的确切PID246823；未启动master或控制用户进程，不记为RViz回放成功。
+状态与待办：问答和地图定位完成。本次实际长运行未自主判定完成，与N040单目标测试区分；结束条件尚不是完整覆盖/收敛证明。若要减少持续探索，可后续实现无地图增益/无新可达前沿的多窗口收敛检测并实测，不在本轮只问答时擅自改任务结束策略。未运行新的飞行/编译/GUI，不保证导出图无遗漏或零鬼影。
+
+[N042-阶段1] 2026-09-29 19:24（Asia/Shanghai）｜进行中：探索提速、收敛补扫和覆盖审计
+用户问题/需求：让仿真更快，明确探索结束及完整建图标准，提出方案并实际修改代码。
+解决思路/答复：先完整读取规则和双记录，保留黑箱传感器规划、无后端和动态自由证据清图；以原生路径搜索、局部访问抑制和降低重型显示频率减少开销，增加隔墙可见性增益与当前维护图的多视点表面证据，低增益转补扫。将在线已观测区域收敛与离线货架参考侧面覆盖区分，不用地图点数增长或返航保存证明完整。
+实际改动：改前bridge/run_sh入口/双记录范围备份/home/a/AstraDroneOpen_backups/exploration_completion_20260929_1915/before.tar.gz，tar比较通过，SHA256=0005843581b0c2add7d08fcfb1c413d4389522b3bd9871ecfd7f9e12f5dc9fc6。新增C++ Dijkstra共享库和可回退Python包装、exploration_coverage.py、离线warehouse_map_audit.py；探索器/配置/launch/运行器新增进展、表面补扫、明确部分返航原因、独立world/map审计对齐及--no-gazebo-gui/--no-rviz。导航上限仅探索从0.45至0.55m/s、安全线段前视1.2m、观察2秒；0.8m膨胀、0.4m机体和风险保护不变。尚未完成最终审查/文档/测试。
+验证结果：原Python 50×30m已知空栅格Dijkstra单次约180.7ms（仅计算微测，非整机基准）；首次catkin fastlio_bridge构建退出0，新共享库成功链接。40项既有Python单测37通过、3个消息测试夹具__new__未初始化新增progress字段报错，正在修正夹具和增加针对性回归，没有把失败写成通过。原始world/雷达频率点数未改，尚未SITL复测。参考作者FUEL README与Gazebo官方物理参数文档，不复制FUEL实现或宣称其性能。
+状态与待办：进行中，需完成补扫/收敛/覆盖测试、原生与Python同输入正确性/耗时比较、独立ROS生命周期和真实SITL启动/返航/审计检查。全仓库完整覆盖、任意三维黑箱探索和零鬼影不能由这些新增指标预先保证；长期返航与卸载segfault保持历史限制。未提交推送。
+
+[N042-阶段2] 2026-09-29 19:44（Asia/Shanghai）｜进行中：短程实飞、补扫回归和快物理档负结果
+用户问题/需求：同N042，要求实际优化速度、结束与完整建图指标。
+解决思路/答复：保持原安全净空，通过精细栅格减轻货架附近量化损失；已测表面多视角质量与离线真值侧面审计分开。保留不能运行的物理积分实验，不把插件参数合法性当作飞控稳定证据。
+实际改动：修复粗表面体素中心落在首次墙面后造成补扫射线假阻挡；仅视点评分允许体素半对角端点裕量，不改变碰撞检测。补扫访问记忆与前沿访问分离；参考对齐后取消高频Gazebo真值订阅，离线审计在仿真退出后运行。当前探索分辨率调整为0.10m、容量500000格，0.80m净空不变，最后配置实飞待验证。试验2ms/500Hz生成副本失败后撤回--fast-sim入口和推荐文档，原world/雷达/PX4文件未改。
+验证结果：57项Python回归及catkin构建通过（最后数值约束及0.10m配置需复查）。相同50×30m/0.20m网格5次搜索中位数Python173.095ms、C++3.412ms，约50.7倍，仅搜索微测不是整机提速。192710真实SITL显式一目标返回保存48787点，home_error=0.1864m，任务部分；193317真实SITL到达3个目标后操作员请求返航，成功保存86142点，home_error=0.0559m，任务部分。货架参考侧面覆盖分别10.58%与32.71%，不能当完整地图；RTF仍约0.50。192710局部旧行人ROI52→0，属于局部几何证据非MOS准确率/全图无残影。合成闭房间room3独立ROS回归验证INSPECTING/RETURNING/HOME_SETTLE/COMPLETE、双视角76/76已测表面合格、observed_reachable_converged、coverage_complete=false、保存1次；不是仓库PX4或全3D覆盖。193754快物理档未通过PX4地面稳定检查，未启动飞行/SLAM、无地图、failed=true；日志和运行副本保留，未绕过门控。
+状态与待办：进行中。继续验证最终0.10m配置及撤回物理档后的当前代码，审查边界/安全条件，更新学术正文和最终记录；完整仓库自然收敛、长程返航、卸载segfault及真机均未验证或未修复，不声明无bug。
+
+[N042-阶段3] 2026-09-29 19:55（Asia/Shanghai）｜进行中：细网格负结果撤回、贴边代价与墙钟保护
+用户问题/需求：同N042；继续按真实结果修改，不以短程/合成结果替代完整建图。
+解决思路/答复：细网格几何可通不等于自由证据足够；保留未知孔洞和原硬安全半径，撤回不兼容改动。路径代价加入可选贴边软惩罚，偏好通道中间而不排除本来可达的窄通道；退让仍逐样本检查真实点净空单调不减、已知机体包络和风险保护。
+实际改动：194424试验0.10m起飞后HOLD_START_NOT_SAFE、0个目标，当前0.15m自由体素中心不能支撑细网格的连续已知区域；已恢复0.20m/200000格，新增保守未知孔洞回归。194829恢复后实际飞行11.11m但反复RECOVER_CLEARANCE、测试180墙钟秒内未到达首目标，保存50161点部分图，未宣称成功。新增与unsafe相邻一格的1.5无量纲软代价、C++/Python加权搜索一致性测试；退让最大命令从0.10到0.20m（比例控制约0.09m/s，普通0.80m膨胀及0.70m最低真实退让净空不改）。新增补扫后发现新前沿重新探索并重置收敛窗口；运行器增加独立4800墙钟秒硬保护，时钟/数据停止时也记录wall_guard_timeout_partial和failed=true，成功后的--keep-open展示例外。
+验证结果：63项单测通过，包含加权搜索与Python一致、可达性不变/不切角、贴边路径减少、退让范围及净空不减、未知孔洞不能当自由、独立墙钟期限/NaN非法输入、重新探索等；C++新加权库构建成功，语法/格式检查继续核验。room4合成ROS闭房间9选择8到达、19.53m航程、76/76已测表面合格、返航驻留保存一次成功；不是PX4/真地图证明。195446当前加权/0.20m退让完整代码真实SITL冷启动正在运行，room5同版本合成回归同步进行。
+状态与待办：进行中；阶段2中“0.10m配置待验证”更正为已实测负结果并撤回，不覆盖原阶段记录。须继续验证当前加权配置在真实仓库能否返航、检查日志/地图/审计并最终记录。长程仓库自然收敛、95%参考侧面覆盖、通用零鬼影、真机和卸载崩溃仍未证实或未解决。
+
+[N042] 2026-09-29 20:03（Asia/Shanghai）｜探索提速、明确收敛/补扫/返航及独立覆盖审计
+用户问题/需求：让仓库仿真更快，说明结束标准、如何认定完整探索以及如何完整构建地图，思考方案并修改代码。
+解决思路/答复：区分规划计算、飞行速度和物理仿真实时因子；保持原world/雷达/硬安全阈值，用原生图搜索、贴边软代价、前沿代表点与可见未知增益减轻计算/无效飞行。低增益转实测表面补扫，观测充分/在线可达收敛与任务返回保存分开，并以独立参考侧面审计检测漏架，不把PCD存在、点数或已测分母当完整3D证明。设计参考FUEL作者README及Gazebo物理参数官方文档，未复现FUEL。
+实际改动：修改前备份/home/a/AstraDroneOpen_backups/exploration_completion_20260929_1915/before.tar.gz（范围bridge/run_sh入口/AGENTS/双记录；tar比较及SHA256=0005843581b0c2add7d08fcfb1c413d4389522b3bd9871ecfd7f9e12f5dc9fc6），用户既有控制/FAST-LIO日志和其他脏修改保留，未提交推送。新增src/exploration_search.cpp共享库、scripts/exploration_native.py、exploration_coverage.py、warehouse_map_audit.py及test/benchmark_exploration_search.py；CMake构建/安装入口更新。改exploration_grid.py和warehouse_explorer.py：八邻域/禁止对角切角不变，可回退Python；局部访问屏蔽、米级前沿代表点、测量墙阻挡的6m增益、1.5无量纲贴边软代价、表面证据和90秒双增益窗口、补扫冷却重试及重新探索、资源/失败/部分结束状态、计算P95/RTF和轻量显示。仅探索launch导航上限0.55m/s、前视1.20m、驻留2秒，退让最大命令0.20m仍逐样本净空不减且>=0.70m，原普通0.80m膨胀、0.40m机体/未知余量、静态safe/emergency clearance=0.30/0.25m、动态/断流停车不缩小。
+结束规则：90仿真秒新增自由面积<1m²、新粗3D表面格<25，至少3个到达观察目标后可转补扫，不直接完成；前沿30秒用尽也转补扫。当前实测0.40m表面格至少3不同扫描时刻、2方位扇区和0.75m基线，质量>=95%，无有用前沿/可达补扫、窗口低增益、无目标失败/容量不足时exploration_complete=true/observed_reachable_converged。补扫视点在8扇区中心按实际栅格航点算方向，防量化/到达误差假新方向；到达不等于观测完成，20秒冷却后允许仍欠观测视点重试。发现新前沿重置窗口返回探索。600仿真秒补扫预算、3600仿真/墙钟探索预算耗尽或视点耗尽质量不足均明确部分结果。返航≤0.30m连续5仿真秒且保存成功才COMPLETE；默认退出，keep-open成功后持续展示。独立运行器4800墙钟秒硬保护含返航，不依赖/clock和消息新鲜度，超时wall_guard_timeout_partial/failed=true；显式--test-seconds属于截断测试，不是完整任务。固定高度规划coverage_complete仍false。
+运行器新增--no-gazebo-gui（保留RViz）/--no-rviz，初期≤50ms接收配对world/map刚体对齐仅用于评估，取到后取消高频真值订阅；退出后对维护PCD离线审计52货架暴露碰撞盒侧面，world高度0.25–1.9m、0.30m参考采样、0.25m欧氏支持，总≥95%且每架≥90%为侧面建议验收，输出_coverage.json及_coverage_missing.pcd。缺口PCD是参考缺口而非建图点；真值/盒子不进入Explorer。扩展说明EXPLORATION_DEMO_CN.md与学术模块G，含启动、行人控制、状态/地图查看、微测复测及负结果。
+验证结果：最终64项Python单测全部通过，含原生/Python加权和无权一致、可达性不变、不切角、贴边代价、净空单调退让、陈旧/重复采样拒绝、窗口/容量守卫、补扫重试与重探、双分母覆盖、PCD有限XYZ及欧氏阈值、独立墙钟期限；最终catkin_make --pkg fastlio_bridge -j2 -l2退出0（/tmp/astra_completion_build_handoff.log），Python编译、入口bash -n、包结构validate_project、局部git diff --check通过。launch dump确认resolution=0.20、clearance=0.80、lookahead=1.20、quality_target=.95、revisit=20、softcost=1.5、recovery=.20、nav=.55/total=.65、uav_radius=.40/safe_clearance=.30等正确。相同50×30m网格五次搜索微测：无权Python178.80ms/C++2.74ms，有软代价Python210.83ms/C++2.99ms，35916可达格、数值一致，约65.3/70.5倍仅搜索耗时（/tmp/astra_completion_search_benchmark_final.json），非整个仿真/飞行倍速。
+真实SITL195446：当前加权搜索/0.20m退让/墙钟运行器代码冷启动headless，以--return-after-goals 1 --test-seconds 240做短程回归；一目标到达、自动返回起点驻留保存，termination=returned_home_and_saved、COMPLETE、home_confirmed=true、home_error=.037626m、102.20墙钟秒、32.905任务仿真秒、11.5866m航程、139.20m²已知平面自由面积，48738有限XYZ点（exploration_demo_runs/warehouse_20260929_195446_final_map.pcd，SHA256=c40f497160a02f58afd4c8c57e0313e16493efcaebbeb669756ba7324ea896b2）。RTF约.505、周期计算P95约76.5ms；explicit_goal_limit_partial/exploration_complete=false，参考侧面10.36%/最差货架0%/验收false，明确不是整仓库完整探索。192710短程和193317操作员三目标返航也成功；194424细格0目标/194829慢退让未完成/193754物理档地面不稳定负结果保留，不能声称同参数统计提速或所有死锁消除。
+最终补扫细化（扇区中心、冷却和严格合成收敛断言）由64单测与room8独立真实ROS进程验证，晚于195446启动，没有拿短程实际未进入补扫当作最终仓库补扫实飞证据。room8运动学闭房间7个视点到达、74/76已测表面格=97.37%合格、低增益、observed_reachable_converged、exploration_complete=true、home_error=.2195m、14.7105m航程、保存服务确认1次，coverage_complete=false；保存服务仅夹具确认非真实PCD。room5/6约92%/91%后部分返航负结果保留，未降低95%阈值。合成加速时间窗口/运动学跟随器不是PX4或全仓库表面覆盖。
+状态与待办：本轮代码改动、备份、上述范围验证与文档/双记录完成，本轮创建ROS/Gazebo进程已退出，无Git发布。真实物理RTF仍约0.5，不能保证比原整机更快或实际实时；原1ms/1000Hz与雷达10Hz/20000点保持，2ms/500Hz和0.10m试验均失败后撤回。完整仓库长程自然收敛、95%侧面参考覆盖、历史RETURN_BLOCKED、全3D遮挡/上下表面扫描、静态保留/MOS/全图零鬼影、真机均未证实或未解决。195446退出仍重现原生Gazebo Segmentation fault（已落盘地图未损坏），不宣称无bug。要真正证明完整建图需先定义目标可观测/可达静态表面，用准确mesh参考、多高度/视角与三维碰撞/视场规划；当前不盲目抬高低顶棚无人机或缩小安全阈值保证通过。
+
+[N043] 2026-09-29 20:37（Asia/Shanghai）｜探索RViz不能拖动的配置诊断
+用户问题/需求：为什么当前RViz不可以拖动；尚未明确是三维画面还是整个窗口。
+解决思路/答复：先完整阅读AGENTS和双记录，再核对正在运行的RViz命令行及其配置。当前探索配置Visualization Manager没有Tools条目，而Noetic RViz官方源码VisualizationManager::load调用ToolManager::load，后者先removeAll再加载配置列表；缺失列表使当前工具为空，handleMouseEvent不会转发鼠标操作。由此定位三维画面不能拖动的配置原因，而不是仅凭进程存在判断GUI正常或崩溃。可在当前RViz工具栏“+”添加MoveCamera并选中，无需停止无人机；Orbit左键旋转、中键或Shift+左键平移、滚轮缩放，保存配置可保留工具。若用户指整个窗口，标题栏拖动问题应另行确认。
+实际改动：仅追加双记录；本轮为诊断问答，未改RViz配置或算法，未重启/终止用户正在运行的仿真，未提交推送。永久配置补齐属于待实施，不能写已修复。
+验证结果：进程279600使用fastlio_bridge/rviz/warehouse_exploration.rviz，文件完整核验缺少Tools、当前View为rviz/Orbit；其他astra_dynamic_avoidance.rviz含MoveCamera等工具。核对本机插件清单具备rviz/MoveCamera并阅读官方noetic-devel的tool_manager.cpp、visualization_manager.cpp、orbit_view_controller.cpp及visualization_frame.cpp，确认清空/鼠标转发和操作路径。未实际在用户GUI点击或验证拖动效果，进程资源采样不能排除另有卡顿。
+状态与待办：三维画面配置根因已定位、提供不中断仿真的手动恢复步骤；未实施永久修复/GUI实测。若是窗口本体无法移动或添加工具后仍失败，需用户进一步说明或截图，本轮无编译需求。
+
+[N044] 2026-09-29 21:33（Asia/Shanghai）｜动态环境点云建图相关论文与方案
+用户问题/需求：目前是否有类似本项目动态SLAM点云建图的论文和解决方案。
+解决思路/答复：区分在线运动点识别、历史地图鬼影清理、动态感知LIO整体系统和离线地图清理。针对目前自由证据更新持久地图的主线，优先FreeDOM、DUFOMap及Dynablox；运动检测参照M-detector；地图质量参照ERASOR2/Removert；完整定位建图参照Dynamic-LIO和DynaLOAM。DUFOMap作者有MID360数据展示，FreeDOM具备ROS/catkin及地图保存接口，但均未在本项目部署，推荐优先级是方法/接口匹配判断，不是性能排名。LMNet偏逐帧MOS，不自动清除历史已入图点。
+实际改动：仅更新双记录，在学术记录文献索引新增R21—R26及本轮研究定位；未改变demo、RViz、算法或参数，未安装编译外部项目或运行飞行，无Git提交推送。
+验证结果：完整读取规则与双记录后，复核当前探索launch启用evidence_only_clearing、稳定点6次自由miss、时间配对和当前回波邻域保护；运行器dynamic_filter=false、回环关闭。阅读FreeDOM原文部分章节、其他原论文摘要/作者README和项目页，核对名称、作者引文与开源入口。当前清理输出在bridge的/uav1/fastlio/cloud_map，不自动改FAST-LIO内部匹配树；旧ours与探索配置不同，未混称同一清理版本。本轮无新性能或地图质量实验。
+状态与待办：完成针对项目的文献/方案对照，来源和阅读范围记入学术记录。建议在相同扫描/位姿下先比较ours、FreeDOM、DUFOMap，再统一规划器评测通道恢复；同时报告静态保留、残影、清理延迟、CPU/内存。自由空间清图及其改善规划已有明确研究，不能作为独创主张；稀疏扫描/位姿误差约束、主动再观察与通道恢复联合评测仍需新颖性与实验证据。尚未复现或确认任何方案可直接接入当前MID360无人机。
+
+[N045] 2026-09-30 09:14（Asia/Shanghai）｜现有工作的研究价值与面向RA-L的具体路线
+用户问题/需求：担忧动态建图已有论文，询问当前工作的意义、相对优点，以及基于现有项目未来投稿RA-L可以选择的方向和具体实施步骤。
+解决思路/答复：明确核心基础思想已有研究，目前主要为工程原型/实验平台，不是已证明优于外部方法的原创算法；保留闭环系统、失败案例与可复现工具的价值，不把功能完成等同论文贡献。优先建议研究“任务驱动的疑似失效占用主动核验”：在稀疏扫描、遮挡、位姿误差下，以匹配的静态误删水平和安全约束更快恢复真实通路。主动感知、概率占用、置信度或MID360标签本身不新；先复现FreeDOM/DUFOMap检查失败边界，再决定新机制。给出证据建模、任务影响估计、安全视点与核验回退、文件衔接、外部基线/消融、真实数据及闭环分层实验、指标和继续/换题标准。
+实际改动：新增交流记录/RA-L研究路线_2026-09-30.md；更新双记录及学术来源R27/R28。没有修改算法、参数、demo、备份或用户其他脏文件，没有安装/部署外部算法、启动仿真、Git提交/推送。所有新算法均为建议待实施。
+验证结果：按规定完整读取规则和双记录；重新核验探索launch、运行器、static_map_builder.cpp的updateEvidenceFreeSpace、exploration_coverage.py及探索调用路径，确认当前固定几何/时序门控和已测表面补扫不同于建议的校准证据/任务核验。查询RA-L官方范围和作者说明、FreeDOM原文、DUFOMap/Dynablox作者资料、APN出版社原文描述及2026 occupancy-world-model工作原文。确认后者arXiv v2只注明IROS 2026 WORLDS Workshop接收，不称主会或RA-L；其RGB-D补全占用任务与本项目有别但已覆盖观测门控/规划影响的宽泛动机。文档核对及限定diff空白检查通过；无本轮编译、飞行、基线复现、统计优势或创新性最终证明。
+状态与待办：研究评估与路线文档完成，不承诺录用。下一阶段宜冻结当前配置、建立三类失败场景和同输入外部对照，而非继续堆回环/网络功能。当前算法优点相对公开方法尚未量化；历史短程成功、长程RETURN_BLOCKED、静态保留/完整覆盖不足均不被本轮建议消除。若强基线已解决问题或收益只来自放宽安全/额外观测预算，应换题或缩小主张。真实MID360手持数据可先做，不能冒充无人机闭环实机证据。
+
+[N046-阶段] 2026-09-30（Asia/Shanghai）｜FreeDOM 独立基线迁移（进行中）
+用户问题/需求：以 LC-Robotics/FreeDOM 为基线，迁移到当前 FAST-LIO2、MID360、仓库动态建图项目。
+解决思路/答复：保留原演示与地图单写者，使用原作者 ROS1 包独立运行；以 FAST-LIO 去畸变 body 点云与 camera_init→body TF 驱动 FreeDOM，并另存地图用于同输入比较。
+实际改动：进行中；尚未改代码或运行仿真。已完整读取双记录并检查用户脏工作树，避免覆盖未提交探索修改。
+验证结果：核对原仓库 MIT 许可、catkin 依赖、地图保存接口和前后端源码；原版以传感器帧点云及相应时刻 TF 输入。确认本项目 /cloud_registered_body 为 body 帧，FAST-LIO 发布 camera_init→body TF；/cloud_registered 已在世界帧，不能再套同一 TF。尚未编译/实测。
+状态与待办：正在实现隔离启动、地图导出及检查；最终证据另追加更正。
+
+[N046-阶段2] 2026-09-30（Asia/Shanghai）｜FreeDOM 首轮端到端验证（进行中）
+用户问题/需求：同N046，FreeDOM 基线应能在当前仓库 MID360 仿真链中运行并导出地图。
+解决思路/答复：以可选 --freedom-baseline 并行启动原作者节点，用 body 帧去畸变点云及 camera_init→body TF，另用 /freedom/save_map 导出，不覆盖 ours 地图或规划器。
+实际改动：已将 MIT 原作者包拷入 SLAM/freedom，保留许可证；新增 MID360 配置与独立launch；适配帧检查和短订阅队列；探索运行器增加可选启动/保存和结果路径。另在继续开发独立坐标对齐审计与降低原作者逐帧日志量，最终版本尚待重测。
+验证结果：FreeDOM包首次及适配后 catkin_make --pkg freedom 编译成功；首轮120墙钟秒头less SITL，FreeDOM 无帧/TF错误，导出173145点 _freedom_static_map_point.pcd，ours导出76252点 _final_map.pcd。探索3/4目标到达、状态EXPLORING、termination=explicit_test_timeout_partial、无返航，原货架侧面参考支持3071/10192（30.13%）；这些不证明FreeDOM更好或已完成建图。FreeDOM侧同口径审计仍在实现/验证。
+状态与待办：复测最终代码、核验双坐标审计及资源/地图质量；不将当前中途截断地图冒充全仓覆盖或动态清理指标。
+
+[N046-完成] 2026-09-30 10:10（Asia/Shanghai）｜FreeDOM 独立静态地图基线迁移及验证
+用户问题/需求：把 LC-Robotics/FreeDOM 作为当前FAST-LIO2/MID360/仓库探索项目的基线迁移，并检验是否可运行。
+解决思路/答复：将原作者MIT包固定到提交dcfd5690cafddf121a80bd8ea477807d9656748e；保留原方法与既有ours规划/清图单写者。FreeDOM订阅FAST-LIO去畸变/body帧点云和camera_init→body TF，仅发布独立/uav1/freedom/static_map并保存独立PCD。关闭未校准MID360 FOV掩膜的raycast enhancement，避免把未观测方向视为空。评估侧用原始FAST-LIO odom和Gazebo初始真值建立camera_init/world对齐，与ours map/world分别做同一参考货架侧面审计，不把真值交给机载规划。
+实际改动：新增SLAM/freedom完整核心源码、LICENSE、config/astra_mid360.yaml、launch/astra_mid360_baseline.launch及ASTRA_BASELINE_CN.md；对上游节点增加帧校验、短扫描队列、保存完成回执和关停时计时摘要（取代逐帧刷日志）；对现有脏文件run_warehouse_exploration.py仅增可选--freedom-baseline启动/保存/双坐标审计，默认旧演示行为不变。未替换任何避障/探索地图发布者；未提交/推送。
+验证结果：catkin_make --pkg freedom -j2最终编译成功；roslaunch --nodes、Python语法、runner生命周期3测和覆盖审计16测通过；三轮无GUI仓库SITL分别120/100/80墙钟秒，均完成两张PCD导出（显式超时部分地图，非探索成功），第二/第三轮双方审计JSON生成。100秒同轮货架侧面支持ours7151/10192=70.16%、FreeDOM7881/10192=77.33%；80秒最终代码轮ours629/10192=6.17%、FreeDOM640/10192=6.28%，显示航线/预算巨大影响，不构成方法优劣结论。最终轮FreeDOM 83792点PCD，头部与实际数据行数匹配；保存完成日志存在，未见帧/TF错误或遗留仿真进程。全仓覆盖、人体旧位置鬼影、静态误删、CPU/内存P95/真机安全均未量测；当前并行FreeDOM不参与规划。
+状态与待办：独立建图基线已接入并通过短时SITL功能链路；不是论文完整增强配置或导航基线。后续若要发表级评价，需相同原始扫描/位姿与运动真值录包、多轮同预算，成对评价残影/静态保留/可达通道及资源；若要以FreeDOM地图驱动规划，必须另做单写者切换和安全回归，不得直接把两个地图发布到同一话题。
+
+[N047] 2026-09-30 17:40（Asia/Shanghai）｜FreeDOM 是否能过滤动态物体
+用户问题/需求：询问刚接入的 FreeDOM 是否也能过滤动态物体。
+解决思路/答复：FreeDOM 原方法包含当前扫描动态体素标记和基于增量自由空间证据的历史地图清理，可输出静态点云地图；这不是人体语义识别，也不能保证静止后移动的人立即清除。现有仓库只将它作为并行只读地图基线，未替换 ours 的 /uav1/fastlio/cloud_map 或规划器输入；MID360 配置关闭未校准的射线增强。建议在同一动态场景比较离开后旧位置残影、静态货架误删与清除延迟。
+实际改动：本轮仅追加双记录，无算法、参数、launch 或 demo 代码改动。
+验证结果：重新核对 FreeDOM 作者论文摘要和项目页；本地检查 freedom.cpp 的 scan_removal/freespace_estimation/map_removal/staticspace_integration，mrmap.cpp 的自由空间动态标记，visualization.cpp 的 clusters/static_pointcloud 输出，以及独立 launch 与 MID360 配置。历史三轮短时 SITL 只证明链路与地图导出，未评价动态过滤效果；本轮未新启动仿真或编译。
+状态与待办：回答能力与当前集成边界；动态物体过滤率、鬼影清除、静态误删和导航收益仍待有真值的成对实验，不能声称已验证。
+
+[N048-阶段] 2026-09-30（Asia/Shanghai）｜探索演示撞墙与地图不完整（进行中）
+用户问题/需求：FreeDOM并行仓库探索demo中无人机撞墙，无法完成全仓建图；要求排查并修复。
+解决思路/答复：先将FreeDOM旁路建图与现有探索/控制链区分。最近173551运行结果为interrupted、HOLD_START_NOT_SAFE、28.20m航程、0目标到达；静态风险长期level2，机心到最近支持点约0.46—0.65m（配置机体半径0.40m），控制器仍以约0.65m/s发布未经全周障碍验证的斥力指令，局部方向反复翻转，构成继续撞障的可信机制。当前没有Gazebo接触真值，不把目视撞墙写为已量测接触事件。全仓建图另受固定高度、遮挡/可达性、地图缺口和任务时限限制，不能由单个安全补丁保证。
+实际改动：进行中；尚未修改算法或重新启动仿真。已检查用户脏工作树并避免覆盖原有未提交修改。
+验证结果：只读核对173551结果/日志及controller、static risk、explorer的源代码和配置；FreeDOM未接管规划器。尚未编译或复测修正。
+状态与待办：先实施探索专属紧急悬停与速度约束、专项控制回归，再用受限SITL验证是否停止继续向墙推送；全仓完整建图需独立长程覆盖及接触真值验收，不能提前声称修复。
+
+[N048-完成] 2026-09-30 18:43（Asia/Shanghai）｜探索演示紧急避障修正与部分建图复测
+用户问题/需求：无人机在仓库探索中撞墙、因此无法完整建图；要求修复并验证，而不是仅解释原因。
+解决思路/答复：FreeDOM仍为并行独立地图基线，未驱动控制/规划。排查发现旧控制器level2直接使用最近障碍斥力速度，双侧货架时可反复改变逃逸方向；探索演示改为level2水平零速度指令，强制要求新鲜注册扫描并降低巡航速度，避免未验证斥力继续推向墙。此为保守风险控制，不保证真实物理瞬停、任意地图位置零碰撞或完整覆盖；固定高度二维规划、遮挡、无法安全到达的表面仍是全图瓶颈。
+实际改动：修改fastlio_bridge/src/mavros_avoidance_controller.cpp新增可选hold_on_level2与require_fresh_scan门控；仅warehouse_exploration.launch启用两项并将水平限速0.55降至0.30m/s，旧对比演示默认行为不变。扩充check_takeoff_controller_live.py验证正常导航、level2停车、过期扫描停车及恢复；EXPLORATION_DEMO_CN.md记录配置、风险与限制。保留用户原工作树；未提交/推送Git。
+验证结果：catkin_make --pkg fastlio_bridge -j2 -l2编译通过，独立ROS假飞控控制器联调全部13项检查通过，探索相关Python 49项测试通过；本轮变更文件diff空白检查通过。120墙钟秒headless FreeDOM并行SITL：到达2个目标、航程11.70m，保存58427点，货架侧面支持16.82%，显式超时部分结果。300墙钟秒同配置SITL：到达7/8已选观测目标、航程39.64m，保存136500点，货架侧面支持76.86%，最低单架0%，未达到总体95%/各架90%验收；结束为explicit_test_timeout_partial，不是任务完成。后一次起飞后日志146个带距离的静态风险采样最小机心到支持点1.08m、未触发level2；实际启动参数检查为max_navigation_speed=0.3、hold_on_level2=true、require_fresh_scan=true。真实SITL未触发修正后的level2分支，只有独立联调对其作了验证；没有Gazebo接触真值，不能声明绝对无碰撞或碰撞修复已全场景证明。旧运行中的停滞原因仍可能在其他航线重现。
+状态与待办：安全控制修正和限时飞行复测已完成，完整仓库建图未完成。下一步需不设短测时限的长程运行、记录Gazebo接触/机体到碰撞盒最小间隙与返航状态，复测level2实际触发及恢复；对缺口实施安全可达的多视点/必要时多高度三维规划与独立覆盖验收，不可降低机体尺寸/安全净空或以局部PCD冒充全图。
+
+[N049-阶段] 2026-10-03 22:14（Asia/Shanghai）｜FreeDOM并行baseline首扫后货架旁停滞（进行中）
+用户问题/需求：baseline demo 首次扫描后在货架附近慢移直至不动；要求修复并先完成此版完整测试。
+解决思路/答复：读取历史记录并核查215945运行日志。该轮仅选1目标、到达0目标，约4.82m航程后HOLD_START_NOT_SAFE，用户中断；控制器曾在一级风险继续执行独立慢退，二级风险则水平停车，与探索器的安全栅格恢复不一致。拟统一为探索器发出有观测支持、净空单调增加的短退路，由控制器基于新扫描二次检查；不可恢复则明确失败而非无限悬停。FreeDOM仍为并行地图基线，不是规划输入。
+实际改动：进行中。已在探索栅格允许从0.45m（0.40m机体半径+0.05m）以上的机心净空单调改善到原0.80m安全格；加专用短退路话题、控制器新扫描核验、前向0.80m防护，禁用探索专属旧式单点斥力退让；新增不安全停滞计时和测试样例。均未宣称成功，未改普通规划0.80m膨胀。
+验证结果：现阶段只有旧运行日志与源码定位；尚未编译、单测、SITL完整任务验证。旧运行的实际接触真值未测量。
+状态与待办：继续静态检查、测试、编译和无短测截断的SITL；如无完整完成须如实报告失败阶段和地图覆盖，不把超时出图称为完成。
+
+[N049-阶段2] 2026-10-03 22:46（Asia/Shanghai）｜完整SITL仍在进行中
+用户问题/需求：同N049，要求完整测试而不是短时出图。
+解决思路/答复：将一级/二级静态风险退路限定为探索器观测空间内净空单调增加的短命令，控制器对同一目标和新扫描复核；安全方向不存在时水平停车，连续无进度30仿真秒显式标记STALLED_UNSAFE并保存部分地图。FreeDOM继续旁路基线。
+实际改动：改exloration_grid/warehouse_explorer、控制器、探索专属launch/YAML、runner终态和回归测试；旧比较demo控制参数保持默认。隔离测试第一次发现退路校验首采样与无穷大前值比较错误，已修正并复测。
+验证结果：探索单元测试50项、runner生命周期3项通过；fastlio_bridge编译成功；假飞控18项控制检查通过，含二级风险退路与过近/动态/目标不匹配/前向刹车。完整无--test-seconds FreeDOM并行仓库SITL于22:20启动，22:46时仍运行，已到达31目标、约224m、自由区域约1139m²，另2个目标曾进度失败但后续仍持续移动；未返航、未最终审计，绝不记为完成。
+状态与待办：继续至任务自然终止或硬时限；核对最终PCD、返航和侧面支持，报告失败与不足。无Gazebo接触真值时不能宣称零碰撞。
+
+[N049-完成] 2026-10-03 23:28（Asia/Shanghai）｜FreeDOM并行baseline首货架停滞修复与完整一轮测试
+用户问题/需求：baseline demo 首扫后在首个货架附近慢移至不动；要求修复，且先完成此版完整测试。
+解决思路/答复：旧215945轮0目标到达、约4.82m航程，HOLD_START_NOT_SAFE，一级风险控制器独立慢退与探索器安全连通性判断互相冲突，二级风险固定停车。改为只有观测自由空间内通往原0.80m安全格、机心净空沿线不减且不小于0.45m的短退路才能恢复；控制器对新扫描、同目标、动态风险与短速度再校验。正常速度增加0.80m前向扫描刹车，禁止探索专属旧斥力退让；不能恢复30仿真秒则明确STALLED_UNSAFE、保存部分地图。普通路径0.80m规划膨胀与机体0.40m半径不变。
+实际改动：修改exploration_grid.py、warehouse_explorer.py、mavros_avoidance_controller.cpp、warehouse_exploration.launch、warehouse_exploration.yaml、run_warehouse_exploration.py；扩充test_exploration_grid.py、test_exploration_mission.py及check_takeoff_controller_live.py；更新EXPLORATION_DEMO_CN.md。保留用户已暂存/未暂存其他工作，未提交或推送。两份交流记录按项目规则追加。
+验证结果：catkin_make --pkg fastlio_bridge成功；探索单测51项、runner生命周期3项、隔离假飞控18项通过；变更文件git diff --check通过。无--test-seconds的headless FreeDOM并行仓库SITL从22:20到约23:24自然返航退出码0，runner termination=returned_home_and_saved、failed=false、home_confirmed=true、home误差0.123m、93/97目标到达、3次目标重规划、航程547.88m、仿真2174.94s。最终ours PCD二进制284418点与FreeDOM ASCII PCD756031点，header与实际记录数一致；退出后无残留ROS/PX4/Gazebo进程。一次实际RECOVER_CLEARANCE后继续探索，但当时融合风险为0；level1/2有条件退让仅由假飞控回归触发验证，不声称真实SITL覆盖该分支。未录Gazebo接触真值，不能声称零碰撞或未来绝不再卡。
+地图质量与限制：此轮finish_reason=wall_budget_partial、exploration_complete=false、coverage_complete=false，不能把返航成功写成全仓建图成功。参考货架侧面ours 9267/10192=90.92%，最差单架29.59%，未过总体95%与各架90%阈值；FreeDOM同口径10091/10192=99.01%，最差单架85.71%，也未过逐架门槛。两图点密度/规则不同且未比较动态ROI、静态误删及接触安全，不能据此宣称方法优劣。
+状态与待办：首货架0目标停滞在本轮未重现，任务完成返航保存链路；但全仓地图质量验收未通过。需另行处理10个低于90%的ours货架与补扫质量平台期、重测风险1/2真实SITL触发和Gazebo接触真值、多随机航线及长程回归；保持失败显式报告机制，不能保证所有世界都无卡死。
+
+[N050] 2026-10-05 12:12（Asia/Shanghai）｜FreeDOM并行demo与现有系统效果对比及改进启发
+用户问题/需求：比较当前FreeDOM并行仓库探索demo与ours项目效果，并分析如何借鉴FreeDOM改进项目。
+解决思路/答复：区分同航线地图质量、动态残影与闭环导航三种问题。2026-10-03完整一轮结果在相同10192个参考货架侧面样本、0.25m欧氏容差下，ours支持9267/10192=90.92%，FreeDOM支持10091/10192=99.01%；最差货架29.59%/85.71%，各有10/3架低于90%。FreeDOM是旁路独立地图，不驱动Explorer或控制器，故93/97目标到达、547.88m航程和返航不能归因于FreeDOM。任务因wall_budget_partial返航，coverage_complete=false，且两图点密度和体素规则不同；本次未测人离开后鬼影、静态误删、接触真值、CPU/P95，不能据此断言整体算法或动态过滤优劣。建议以相同原始扫描/位姿与统一评价栅格，对缺架及历史人体ROI做成对审计；将FreeDOM保守自由空间、多分辨率与扫描级/地图级分离处理作为设计参照，先比较每个旧占用的保留/撤销分歧，再设计不确定状态与任务关键位置的主动复观测；安全约束和当前实时占用始终优先，不能直接用旁路图放通未知区域。
+实际改动：仅追加双交流记录；未修改demo、算法、配置或地图，未启动新仿真、编译或Git发布。
+验证结果：完整读取规则和双记录，重新核对warehouse_20261003_222021_result.json及两份_coverage.json、FreeDOM本地配置/集成说明/运行器接线，并核查FreeDOM作者GitHub与论文摘要。确认FreeDOM关闭未标定MID360 raycast enhancement，属于保守适配而非完整论文配置；原始结果为同轮、不同输出地图对同一碰撞盒侧面参考的代理审计，不是动态真值或全3D覆盖。没有新增实测或性能数字。
+状态与待办：比较与改进路线已说明；尚需统一体素/密度、同输入动态ROI与静态真值、处理资源、接触安全和同规划器地图切换闭环A/B，才能判断真实方法优势。FreeDOM并行地图不应被误表述为已改进当前探索导航。
+
+[N051] 2026-10-05 12:41（Asia/Shanghai）｜组会PPT全量素材与逐页大纲
+用户问题/需求：整理项目全部工作、机制规则、采用/参考的项目和论文、优点、性能评估与落地可行性，生成供后续Codex制作组会PPT的详细文档（含图表描述），另生成总体大纲并给出位置。
+解决思路/答复：完整读取AGENTS及双历史记录后，核对源码接线、配置、已有JSON/PCD/回环报告和原作者资料，以“历史占用影响任务→观测驱动维护→规划/探索→强基线暴露缺架”为主线。明确当前实现、历史实测、历史测试记录、文献参考及待实施；区分FreeDOM旁路与导航主链、COMPLETE与wall_budget_partial/coverage=false、单次内部组合消融与公平外部基线、地图侧面支持与动态真值。
+实际改动：新增docs/组会汇报/2026-10-05/01_项目全量素材与PPT生成说明.md（747行、31265字符），含模块/规则/参数、R01–R28文献归属、E01–E08证据、18组图表说明、成组启动及行人控制、落地/轻量化/研究计划与问答；新增02_组会PPT总体大纲.md（408行、9942字符），含30页主讲、12页附录、20/10分钟压缩版、图表规范、可复制PPT生成任务和验收清单。仅新增文档及追加双记录，保留全部既有代码修改，无提交/推送。
+验证结果：重新核对E01两份metrics，39.4%耗时及38.8%路程变化为单次观察；E02任务JSON；E03双coverage中的9267/10192和10091/10192、10/3低支持货架，以及PCD头284418/756031点；E04原在线轨迹报告。检查两文档明确的项目根相对路径均存在、代码围栏配对、F01–F18/S01–S30/R01–R28编号完整，文档diff检查无报错。关键作者仓库/原论文入口及ROS/Gazebo维护状态来源已查。未新跑仿真、编译、资源/碰撞测试，也未生成实际PPT或图表，历史测试不冒充本轮测试。
+状态与待办：两份材料已完成供用户后续生成PPT。后续需按说明查看/渲染真实图片与PCD、统一地图坐标和视角，实际制作PPT及逐页预览；CPU/RSS、动态真值、接触安全与全3D覆盖仍未验证。
+
+[N052-阶段] 2026-10-05 12:45（Asia/Shanghai）｜当前项目发布至GitHub（进行中）
+用户问题/需求：将当前项目上传到用户的GitHub，并告知上传地址。
+解决思路/答复：核对远程、分支、工作区和公开敏感信息后，统一提交未忽略的当前项目改动；远程main与本地基线不同，先整合远程历史，禁止强制覆盖。发布完成后核验提交哈希与远程地址。
+实际改动：进行中；尚未创建提交或推送。确认origin为https://github.com/yidrone/AstraDroneOpen.git，当前分支main。本轮前已有暂存/未暂存的探索、安全恢复、FreeDOM迁移、测试、文档及组会材料改动，按用户“项目”范围准备一并发布；Git忽略的构建、bag、PCD等生成物不强制加入。
+验证结果：git ls-remote可读取origin各分支；远程main为000b725，当前本地HEAD为c639a07，需常规整合。检查新增FreeDOM约376KB、组会材料约92KB；对变更候选做常见私钥/令牌模式扫描，无命中。尚未验证推送权限。
+状态与待办：继续git add/提交、fetch并整合远程main、正常push，随后核验远程提交与GitHub地址；若认证或合并冲突阻塞，将如实报告，绝不强推。

@@ -14,8 +14,19 @@
   <!-- One waypoint writer. Keep the original controller's 1.5 s planner
        watchdog + static/dynamic risk guard, but use observed-free exploration. -->
   <param name="/mavros_avoidance_controller/use_path_planner" value="true"/>
+  <!-- At 0.55 m/s the UAV can cross the 0.80m planner-to-0.65m emergency
+       distance gap in roughly one sensor/control cycle plus braking latency.
+       Use a conservative cap until stopping distance is measured in SITL. -->
+  <param name="/mavros_avoidance_controller/max_navigation_speed" value="0.30"/>
+  <!-- A nearest-point emergency vector is not checked against the opposite
+       shelf. Fail closed instead of allowing level-2 repulsion to keep flying. -->
+  <param name="/mavros_avoidance_controller/hold_on_level2" value="true"/>
+  <param name="/mavros_avoidance_controller/require_fresh_scan" value="true"/>
+  <!-- Explorer alone authorizes short static recovery; disable the older
+       nearest-point retreat that can drive toward an opposite shelf. -->
+  <param name="/mavros_avoidance_controller/static_recovery_speed" value="0.0"/>
   <!-- Explorer owns final-arrival decisions. Every controller input remains
-       an intermediate waypoint (3cm tolerance), including 10cm recovery.
+       an intermediate waypoint (3cm tolerance), including bounded recovery.
        Do not let an old RViz final goal suppress a short recovery command. -->
   <param name="/mavros_avoidance_controller/final_goal_topic" value="/uav1/exploration/controller_final_goal_unused"/>
   <!-- Exploration-only map protection; old badcase/ours settings unchanged. -->

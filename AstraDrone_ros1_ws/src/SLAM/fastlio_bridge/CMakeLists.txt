@@ -47,6 +47,12 @@ include_directories(
 )
 add_definitions(${PCL_DEFINITIONS})
 
+# Dependency-free optional accelerator, loaded through ctypes. Keep Python
+# fallback for source-only tests; deployment should build this target.
+add_library(astra_exploration_search SHARED src/exploration_search.cpp)
+install(TARGETS astra_exploration_search
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
+
 function(add_fastlio_node target source)
   add_executable(${target} src/${source})
   add_dependencies(${target} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -103,6 +109,10 @@ install(DIRECTORY launch config rviz
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 catkin_install_python(PROGRAMS
   scripts/exploration_grid.py
+  scripts/exploration_native.py
+  scripts/exploration_coverage.py
+  scripts/warehouse_map_audit.py
+  scripts/startup_checks.py
   scripts/warehouse_explorer.py
   scripts/exploration_pedestrian_walk.py
   scripts/warehouse_scene.py

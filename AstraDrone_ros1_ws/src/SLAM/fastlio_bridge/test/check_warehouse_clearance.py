@@ -200,7 +200,9 @@ def main():
             preview_sub = rospy.Subscriber('/clearance_controller/command_preview',TwistStamped,
                                             lambda m: previews.append(m),queue_size=1)
             for final_x in (5., .1):
-                deadline = time.monotonic()+3
+                # Includes the new ground stability + takeoff dwell guard;
+                # preview mode still does not publish any real FCU command.
+                deadline = time.monotonic()+6
                 while time.monotonic()<deadline:
                     h=Header(stamp=rospy.Time.now(),frame_id='map')
                     pose=PoseStamped(header=h);pose.pose.position.z=1.2;pose.pose.orientation.w=1

@@ -13,6 +13,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 from warehouse_explorer import xyz,Explorer
+from exploration_coverage import ProgressWindow
 
 
 class MessageTest(unittest.TestCase):
@@ -30,6 +31,7 @@ class MessageTest(unittest.TestCase):
     @patch('warehouse_explorer.rospy.Time.now',return_value=rospy.Time(10))
     def test_missing_data_publishes_no_waypoint(self,clock):
         node=Explorer.__new__(Explorer)
+        node.progress=ProgressWindow()
         node.inputs={}
         node.home=None
         node.lock=threading.Lock()
@@ -42,6 +44,7 @@ class MessageTest(unittest.TestCase):
     @patch('warehouse_explorer.time.monotonic',return_value=20.)
     def test_stale_scan_publishes_no_waypoint(self,wall,clock):
         node=Explorer.__new__(Explorer)
+        node.progress=ProgressWindow()
         node.inputs={name:(Mock(),19.) for name in ('odom','map','scan','free','mavros')}
         node.inputs['scan']=(Mock(),10.)
         node.home=0.
@@ -55,6 +58,7 @@ class MessageTest(unittest.TestCase):
     @patch('warehouse_explorer.time.monotonic',return_value=20.)
     def test_republished_old_map_cannot_finish_home_dwell(self,wall,clock):
         node=Explorer.__new__(Explorer)
+        node.progress=ProgressWindow()
         node.inputs={name:(PointCloud2(),19.) for name in ('map','scan','free')}
         node.inputs.update(odom=(Odometry(),19.),mavros=(PoseStamped(),19.))
         for msg,_ in node.inputs.values():

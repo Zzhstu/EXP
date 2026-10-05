@@ -1,29 +1,68 @@
 # Independent demo only. Map axes are FAST-LIO aligned ENU, not Gazebo world.
-# Broad mission fence, not a privileged obstacle map; tune if spawn changes.
-bounds: [-4.0, -12.0, 47.0, 15.0]
-resolution: 0.20
+# This is a finite compute window around map origin, NOT a warehouse outline.
+# It grows only when the UAV pose or fresh lidar free-space observations
+# approach its edge. New cells remain unknown and are not traversable.
+initial_window_radius: 12.0
+growth_margin: 4.0
+growth_chunk: 8.0
+max_grid_cells: 200000          # explicit finite resource limit
+resolution: 0.20               # match sparse 0.15m free-voxel centre evidence
+# Do NOT lower resolution alone: 0.10m leaves unknown holes between free
+# samples and fails body_known in the live warehouse. A finer grid requires
+# consistent ray/voxel traversal evidence, not blind dilation of unknown space.
 # Total body-centre clearance includes ~0.40 m rotor envelope. Quantization
 # half-diagonal is added by the grid. Do not reduce to make a bad path pass.
 clearance: 0.80
 unknown_margin: 0.40
-# Recovery only, NOT a smaller planning radius: if already pushed into the
-# inflated margin, allow an observed-space retreat whose raw-point clearance
-# never decreases. 0.70 matches the warehouse reactive warning centre distance.
-# Each recovery command is <=0.10m, and ordinary .80m inflation is unchanged.
-recovery_minimum_clearance: 0.70
+# Recovery only, NOT a smaller planning radius. A 0.40m rotor envelope plus
+# 0.05m buffer is the absolute floor; only monotonic-clearance motion toward a
+# NORMAL .80m safe cell is allowed. Controller rechecks every fresh scan.
+recovery_minimum_clearance: 0.45
+recovery_command_horizon: 0.20 # kp*0.20 ≈0.09m/s; monotone raw-clearance check remains
+unsafe_stall_seconds: 30.0 # no 0.20m progress => explicit partial failure, never silent hover
+clearance_cost_weight: 1.50    # soft 1-cell edge penalty, never shrinks hard clearance
 height_below: 0.45
 height_above: 0.55
-lookahead: 0.60
+# The controller is proportional; a 1.2m safe-segment lookahead avoids capping
+# cruise to kp(0.45)*0.6m=0.27m/s while keeping every swept segment checked.
+lookahead: 1.20                # swept segment still checked; cruise kp*1.2 ≈0.54m/s
 arrival_tolerance: 0.30
-settle_seconds: 3.0
+settle_seconds: 2.0            # >= several scans at 10Hz; not a smaller clearance
 progress_timeout: 25.0
 blacklist_seconds: 60.0
-# Fixed altitude is captured after takeoff and never follows odometry drift.
+# Fixed altitude is captured after takeoff: this is planar exploration, not
+# complete 3-D black-box exploration. Vertical layers/obstacle overflight are
+# intentionally not inferred from the warehouse model.
 takeoff_relative_height: 1.2
 planning_hz: 2.0
 input_timeout_wall: 3.0
 input_timeout_sim: 1.5          # reject timer-republished old acquisition data
 no_frontier_seconds: 30.0
+# Ignore tiny holes / unknown cells behind measured walls, not real frontiers.
+frontier_sensor_range: 6.0
+frontier_min_gain_area: 0.50    # m² approximate visible unknown gain, not coverage
+visualization_hz: 0.5          # only grid/markers/disk status; waypoints remain 2Hz
+# Convergence has TWO evidence streams; a stable free-floor map alone is not
+# enough. Low gain after >=3 successful observations moves to surface inspection.
+convergence_seconds: 90.0
+convergence_free_area: 1.0      # m² newly observed in the window
+convergence_new_surfaces: 25   # unique coarse 3D measured surface voxels
+convergence_min_goals: 3
+# Current-map coarse surface quality, NOT completeness of unseen surfaces.
+surface_voxel: 0.40
+surface_min_hits: 3            # distinct input acquisition stamps
+surface_min_views: 2           # azimuth sectors + independent observation baseline
+surface_view_baseline: 0.75
+surface_observation_range: 6.0
+surface_height_below: 0.95     # exclude floor near 1.2m flight height
+surface_height_above: 2.0
+surface_max_voxels: 150000
+surface_quality_target: 0.95   # denominator: CURRENT measured map, not world mesh
+inspection_max_surface_targets: 60
+inspection_plan_seconds: 3.0
+inspection_visit_spacing: 0.8
+inspection_revisit_seconds: 20.0 # arrival alone is not surface evidence; bounded retries
+inspection_budget_seconds: 600.0  # sim seconds; exhaustion => PARTIAL, not complete
 save_every_wall_seconds: 60.0
 # Mission state: frontier -> close-range inspection -> return -> settle -> save.
 # 0 disables the explicit goal limit (useful for short lifecycle regression).
@@ -34,4 +73,5 @@ inspection_surface_range: 3.0   # inspect reachable space near measured surfaces
 home_tolerance: 0.30            # metres XY; not the final map accuracy
 home_settle_seconds: 5.0        # continuous in-radius dwell, reset on departure
 max_mission_seconds: 3600.0     # sim seconds; budget => PARTIAL coverage + return
+max_mission_wall_seconds: 3600.0 # wall seconds; slow /clock cannot run forever
 return_timeout: 1200.0         # blocked return => failed, never false success

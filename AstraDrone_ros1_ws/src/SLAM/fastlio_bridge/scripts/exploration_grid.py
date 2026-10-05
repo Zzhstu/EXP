@@ -8,6 +8,7 @@ This is a fixed-height projection, not a proof of full 3-D collision freedom.
 import heapq
 import math
 import numpy as np
+from exploration_native import search as native_search
 
 
 def expand(mask, radius, outside=False):
@@ -24,7 +25,8 @@ def expand(mask, radius, outside=False):
 
 
 class ExplorationGrid:
-    def __init__(self, bounds, resolution=.2, clearance=.8, unknown_margin=.4):
+    def __init__(self, bounds, resolution=.2, clearance=.8, unknown_margin=.4,
+                 max_cells=200000):
         self.x0, self.y0, self.x1, self.y1 = map(float, bounds)
         self.resolution = float(resolution)
         if (not all(math.isfinite(v) for v in bounds) or resolution < .1 or
@@ -33,8 +35,9 @@ class ExplorationGrid:
             raise ValueError('Invalid bounds/resolution/body clearance')
         self.shape = (int(math.ceil((self.y1-self.y0)/resolution)),
                       int(math.ceil((self.x1-self.x0)/resolution)))
-        if self.shape[0]*self.shape[1] > 200000:
-            raise ValueError('Exploration grid too large; bounded at 200000 cells')
+        self.max_cells = int(max_cells)
+        if self.max_cells < 1 or self.shape[0]*self.shape[1] > self.max_cells:
+            raise ValueError('Exploration grid exceeds configured cell capacity')
         self.known = np.zeros(self.shape, dtype=bool)
         self.occupied = self.known.copy()
         self.safe = self.known.copy()
@@ -42,6 +45,61 @@ class ExplorationGrid:
         # Account for point-to-cell quantization in the same way as old A*.
         self.clearance = clearance / resolution + math.sqrt(2)/2
         self.unknown_margin = unknown_margin / resolution
+
+    def grow_to_include(self, points, margin=4.0, chunk=8.0):
+        """Grow the computational window around *observed* points.
+
+        Returned padding is (y_low, y_high, x_low, x_high), suitable for
+        np.pad. Existing cell/world coordinates are preserved. Nothing is
+        marked known by growing; outside space remains unknown and therefore
+        non-traversable. None means the finite cell budget would be exceeded.
+        """
+        points = np.asarray(points, dtype=float)
+        if points.size == 0:
+            return (0, 0, 0, 0)
+        points = points.reshape((-1, points.shape[-1]))[:, :2]
+        points = points[np.isfinite(points).all(axis=1)]
+        if not len(points):
+            return (0, 0, 0, 0)
+        if margin < 0 or chunk <= 0:
+            raise ValueError('Growth margin/chunk must be nonnegative/positive')
+        r = self.resolution
+        chunk_cells = max(1, int(math.ceil(chunk/r)))
+
+        def cells_needed(distance):
+            needed = max(0, int(math.ceil(distance/r - 1e-9)))
+            return int(math.ceil(needed/chunk_cells))*chunk_cells if needed else 0
+
+        left = cells_needed(self.x0 + margin - float(points[:, 0].min()))
+        right = cells_needed(float(points[:, 0].max()) - (self.x1 - margin))
+        low = cells_needed(self.y0 + margin - float(points[:, 1].min()))
+        high = cells_needed(float(points[:, 1].max()) - (self.y1 - margin))
+        if not (left or right or low or high):
+            return (0, 0, 0, 0)
+        height, width = self.shape[0]+low+high, self.shape[1]+left+right
+        if height*width > self.max_cells:
+            # A coarse chunk is a performance optimization, not a reason to
+            # reject an otherwise affordable one-cell boundary extension.
+            left = max(0, int(math.ceil((self.x0+margin-float(points[:,0].min()))/r-1e-9))) if self.x0+margin > points[:,0].min() else 0
+            right = max(0, int(math.ceil((float(points[:,0].max())-(self.x1-margin))/r-1e-9))) if points[:,0].max() > self.x1-margin else 0
+            low = max(0, int(math.ceil((self.y0+margin-float(points[:,1].min()))/r-1e-9))) if self.y0+margin > points[:,1].min() else 0
+            high = max(0, int(math.ceil((float(points[:,1].max())-(self.y1-margin))/r-1e-9))) if points[:,1].max() > self.y1-margin else 0
+            height, width = self.shape[0]+low+high, self.shape[1]+left+right
+            if height*width > self.max_cells:
+                return None
+        pads = (low, high, left, right)
+        if not any(pads):
+            return pads
+        self.known = np.pad(self.known, ((low, high), (left, right)), constant_values=False)
+        self.occupied = np.pad(self.occupied, ((low, high), (left, right)), constant_values=False)
+        self.safe = np.pad(self.safe, ((low, high), (left, right)), constant_values=False)
+        self.body_known = np.pad(self.body_known, ((low, high), (left, right)), constant_values=False)
+        self.x0 -= left*r
+        self.y0 -= low*r
+        self.x1 = self.x0 + width*r
+        self.y1 = self.y0 + height*r
+        self.shape = (height, width)
+        return pads
 
     def cell(self, xy):
         return (int(math.floor((xy[1]-self.y0)/self.resolution)),
@@ -75,19 +133,27 @@ class ExplorationGrid:
         self.body_known = self.known & ~expand(~self.known, self.unknown_margin, outside=True)
         self.safe = self.body_known & ~expand(self.occupied, self.clearance)
 
-    def reconnect(self, position, points, minimum_clearance=.70, max_distance=1.):
+    def reconnect(self, position, points, minimum_clearance=.45, max_distance=2., command_horizon=.10):
         """Recover when new returns invalidate the current inflated cell.
 
         NEVER erase inflation around the start. Only return a short segment to
         a normally safe cell if all sampled raw-point clearances are >= the
-        start clearance (5mm numerical allowance) and >= the reactive warning
-        distance. Body footprint must remain observed. Existing risk controller
-        still overrides this output. This is not a 3-D collision certificate.
+        start clearance (5mm numerical allowance) and >= the body radius plus
+        5cm. Body footprint must remain observed. The controller separately
+        validates each short command against a fresh scan, even on level 2.
+        This is not a 3-D collision certificate.
         """
         start = self.cell(position)
+        if (not math.isfinite(command_horizon) or not .03<=command_horizon<=.25 or
+                not math.isfinite(minimum_clearance) or minimum_clearance < .45 or
+                not math.isfinite(max_distance) or max_distance <= 0):
+            raise ValueError('Recovery command horizon must be between .03 and .25 m')
         if not self.inside(start) or not self.body_known[start] or not len(points):
             return None
         points = np.asarray(points)[:,:2]
+        points = points[np.isfinite(points).all(axis=1)]
+        if not len(points):
+            return None
         position = np.asarray(position)
         initial = float(np.linalg.norm(points-position,axis=1).min())
         if initial < minimum_clearance:
@@ -104,6 +170,8 @@ class ExplorationGrid:
                     d = float(np.linalg.norm(xy-position))
                     if d <= max_distance:
                         candidates.append((d,y,x))
+        # Prefer the closest normally-safe cell; every candidate still needs a
+        # fully observed, strictly clearance-improving join from the REAL pose.
         for length,y,x in sorted(candidates):
             target = np.asarray(self.xy((y,x)))
             previous = initial
@@ -118,14 +186,30 @@ class ExplorationGrid:
                     break
                 previous = distance
             if valid and previous >= initial+.05:
-                # 10cm command horizon keeps P-controller recovery slow; it is
+                # Bounded command horizon keeps P-controller recovery slow; it is
                 # revalidated every tick instead of blindly flying the join.
-                point = position + min(1.,.10/max(length,1e-6))*(target-position)
+                point = position + min(1.,command_horizon/max(length,1e-6))*(target-position)
                 return tuple(float(v) for v in point)
         return None
 
-    def search(self, start):
-        """Dijkstra on only observed, inflated free cells; no corner cutting."""
+    def search(self, start, backend='auto', clearance_weight=0.):
+        """Dijkstra with optional soft edge cost; same HARD safe/no-cut rules.
+
+        With nonzero weight, distance means equivalent length cost, not actual
+        path length. A narrow but safe corridor stays reachable, not excluded.
+        """
+        if backend not in ('auto','native','python'):
+            raise ValueError('Unknown search backend')
+        if not math.isfinite(clearance_weight) or not 0<=clearance_weight<=100:
+            raise ValueError('Clearance cost weight must be finite in [0,100]')
+        penalties = (expand(~self.safe,1.01,outside=True).astype(np.float32)*clearance_weight
+                     if clearance_weight else None)
+        if self.inside(start) and backend != 'python':
+            result = native_search(self.safe,start,self.resolution,penalties)
+            if result is not None:
+                return result
+            if backend == 'native':
+                raise RuntimeError('Build astra_exploration_search first')
         distance = np.full(self.shape, np.inf)
         parent = {}
         if not self.inside(start) or not self.safe[start]:
@@ -143,7 +227,8 @@ class ExplorationGrid:
                     continue
                 if dx and dy and (not self.safe[y+dy,x] or not self.safe[y,x+dx]):
                     continue
-                new = cost + self.resolution * (math.sqrt(2) if dx and dy else 1.)
+                new = cost + self.resolution * (math.sqrt(2) if dx and dy else 1.)*\
+                    (1.+(float(penalties[v]) if penalties is not None else 0.))
                 if new + 1e-9 < distance[v]:
                     distance[v] = new
                     parent[v] = u
@@ -167,9 +252,15 @@ class ExplorationGrid:
     def path(self, parent, start, goal):
         result = [goal]
         while result[-1] != start:
-            if result[-1] not in parent:
-                return []
-            result.append(parent[result[-1]])
+            if isinstance(parent,np.ndarray):
+                index = int(parent[result[-1]])
+                if index < 0:
+                    return []
+                result.append(divmod(index,self.shape[1]))
+            else:
+                if result[-1] not in parent:
+                    return []
+                result.append(parent[result[-1]])
         return list(reversed(result))
 
     def segment_safe(self, a, b):

@@ -1,0 +1,15 @@
+<launch>
+  <!-- Run alongside the existing demo. Never remap this output to
+       /uav1/fastlio/cloud_map: static_map_builder must remain its sole writer. -->
+  <arg name="output"/>
+  <node name="freedom" pkg="freedom" type="freedom_node" output="screen" required="true">
+    <rosparam command="load" file="$(find freedom)/config/astra_mid360.yaml"/>
+    <param name="pointcloud_topic" value="/cloud_registered_body"/>
+    <param name="map_tf_frame" value="camera_init"/>
+    <param name="sensor_tf_frame" value="body"/>
+    <param name="save_map_topic" value="/freedom/save_map"/>
+    <param name="save_map_path" value="$(arg output)_freedom_"/>
+    <param name="enable_visualization" value="true"/>
+    <remap from="~static_pointcloud" to="/uav1/freedom/static_map"/>
+  </node>
+</launch>
